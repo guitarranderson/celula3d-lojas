@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Célula 3D Lojas</title>
+<link rel="icon" href="favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="estilo.css?v=1">
+<style>
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.grand{text-align:right;display:flex;gap:22px;flex-wrap:wrap;justify-content:flex-end}
+.grand .lbl{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.grand .val{font-family:var(--mono);font-size:1.25rem;color:var(--money);font-variant-numeric:tabular-nums}
+.grand .val.sold{color:var(--ok)}
+.topbar{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap;margin-bottom:-10px}
+
+.tabsbar{display:flex;align-items:flex-end;gap:4px;overflow-x:auto;border-bottom:2px solid var(--accent);padding-top:4px;scrollbar-width:thin}
+.tab{flex:0 0 auto;background:var(--sunk);color:var(--muted);border:1px solid var(--line);border-bottom:none;border-radius:var(--r) var(--r) 0 0;padding:9px 16px;font-weight:500;white-space:nowrap;display:flex;gap:8px;align-items:center}
+.tab .n{font-family:var(--mono);font-size:.75rem;background:var(--surface);border-radius:20px;padding:1px 7px}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.tab[aria-selected="true"] .n{background:rgba(255,255,255,.22);color:inherit}
+.tab.add{background:transparent;border-style:dashed;color:var(--accent);font-weight:600}
+.tab.add:hover{background:var(--accent-soft)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-top:none;border-radius:0 0 var(--r) var(--r);padding:18px;display:flex;flex-direction:column;gap:18px;margin-top:-18px}
+.storehead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px}
+.storehead h2{font-weight:600;font-size:1.35rem;margin:0}
+.storehead .acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.stat{background:var(--surface);padding:10px 14px}
+.stat .lbl{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.stat .val{font-family:var(--mono);font-size:1.15rem;font-variant-numeric:tabular-nums}
+.stat .val.m{color:var(--money)} .stat .val.s{color:var(--ok)}
+
+form.item{display:grid;grid-template-columns:2.2fr 1fr .8fr 1fr auto;gap:10px;align-items:end;background:var(--sunk);padding:14px;border-radius:var(--r)}
+form.item.editing{outline:2px solid var(--money)}
+.formtotal{grid-column:1/-1;font-size:.88rem;color:var(--muted)}
+.formtotal b{font-family:var(--mono);color:var(--money);font-weight:500}
+.formbtns{display:flex;gap:6px}
+
+h3.sec{font-size:1rem;margin:4px 0 -8px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+h3.sec small{font-family:var(--body);font-weight:400;color:var(--muted);font-size:.85rem}
+.tablebox{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+th.r,td.r{text-align:right}
+td.code{font-family:var(--mono);font-size:.85rem;color:var(--muted)}
+td.money{font-family:var(--mono)}
+td.total{font-family:var(--mono);color:var(--money);font-weight:500}
+td.sold{font-family:var(--mono);color:var(--ok);font-weight:500}
+td.acts{text-align:right;white-space:nowrap}
+td.zero{color:var(--danger)}
+tr.sel td{background:var(--accent-soft)}
+tfoot td{font-weight:600;border-bottom:none}
+.pill{display:inline-block;font-size:.7rem;padding:1px 8px;border-radius:20px;background:var(--danger-soft);color:var(--danger);margin-left:6px;vertical-align:middle}
+
+#login{max-width:380px;margin:8vh auto 0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:14px}
+#login .brand{justify-content:center;flex-direction:column;text-align:center}
+#login .logo{width:84px;height:84px}
+.linkbox{font-family:var(--mono);font-size:.8rem;background:var(--sunk);padding:10px;border-radius:6px;word-break:break-all;user-select:all}
+
+@media (max-width:720px){
+  form.item{grid-template-columns:1fr 1fr}
+  form.item .f-nome,form.item .formbtns{grid-column:1/-1}
+  form.item .formbtns .btn{flex:1}
+  .stats{grid-template-columns:1fr 1fr}
+  .grand{text-align:left;justify-content:flex-start}
+  thead{display:none}
+  table,tbody,tfoot,tr,td{display:block}
+  tbody tr{border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;margin-bottom:10px;display:grid;grid-template-columns:1fr auto;gap:2px 10px}
+  tbody td{border:none;padding:2px 0;text-align:left!important}
+  tbody td.nome{font-weight:600}
+  tbody td[data-l]::before{content:attr(data-l) ": ";color:var(--muted);font-size:.85rem}
+  tbody td.acts{grid-column:1/-1;border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
+  tfoot tr{display:flex;justify-content:space-between;padding:8px 2px}
+  tfoot td{padding:0} tfoot td.hm{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="status" class="notice" hidden></div>
+
+  <form id="login" hidden autocomplete="on">
+    <div class="brand"><img class="logo" src="logo.png" alt="Célula 3D"><h1>Célula 3D <span class="hl">Lojas</span></h1></div>
+    <div class="field"><label for="lEmail">E-mail</label><input id="lEmail" type="email" autocomplete="username" required></div>
+    <div class="field"><label for="lSenha">Senha</label><input id="lSenha" type="password" autocomplete="current-password" required></div>
+    <button class="btn" type="submit" id="lBtn">Entrar</button>
+  </form>
+
+  <div id="app" hidden>
+    <div class="topbar"><button class="link" id="sair" type="button">Sair</button></div>
+    <header>
+      <div class="brand">
+        <img class="logo" src="logo.png" alt="Célula 3D">
+        <div><h1>Célula 3D <span class="hl">Lojas</span></h1><p class="sub">Peças prontas deixadas para venda em cada loja parceira</p></div>
+      </div>
+      <div class="grand">
+        <div><div class="lbl">Nas lojas agora</div><div class="val" id="gEstoque">R$ 0,00</div></div>
+        <div><div class="lbl">Vendido (total)</div><div class="val sold" id="gVendido">R$ 0,00</div></div>
+        <div style="flex-basis:100%"><button class="link" id="pdfTodas" type="button">Imprimir todas as lojas (PDF)</button></div>
+      </div>
+    </header>
+    <div class="tabsbar" role="tablist" id="tabs"></div>
+    <section class="panel" id="panel"></section>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script type="module">
+import { sb, configurado, brl, fmtQ, $, esc, parseNum, dataHora, msgErro, dialog, copiar } from "./comum.js?v=1";
+
+let lojas = [], itens = [], vendas = [], ativa = null, editId = null;
+try { ativa = localStorage.getItem("c3l-aba"); } catch {}
+
+function status(msg, tipo) { const s = $("status"); s.hidden = !msg; s.textContent = msg || ""; s.className = "notice" + (tipo ? " " + tipo : ""); if (tipo === "ok") setTimeout(() => { if (s.textContent === msg) s.hidden = true; }, 3500); }
+
+async function comTrava(btn, fn) {
+  const txt = btn?.textContent; if (btn) { btn.disabled = true; btn.textContent = "Salvando…"; }
+  try { await fn(); return true; } catch (e) { status(msgErro(e), "err"); console.error(e); return false; }
+  finally { if (btn) { btn.disabled = false; btn.textContent = txt; } }
+}
+
+/* ---------- dados ---------- */
+async function carregar() {
+  const [a, b, c] = await Promise.all([
+    sb.from("lojas").select("id,nome,token,criado_em").order("criado_em"),
+    sb.from("itens").select("id,loja_id,nome,codigo,qtd,valor,criado_em").order("criado_em"),
+    sb.from("vendas").select("id,loja_id,item_id,nome,codigo,qtd,valor,criado_em").order("criado_em", { ascending: false }),
+  ]);
+  for (const r of [a, b, c]) if (r.error) throw r.error;
+  lojas = a.data; itens = b.data; vendas = c.data;
+  render();
+}
+let tRecarga;
+const recarregarLogo = () => { clearTimeout(tRecarga); tRecarga = setTimeout(() => carregar().catch(() => {}), 400); };
+
+const itensDa = id => itens.filter(i => i.loja_id === id);
+const vendasDa = id => vendas.filter(v => v.loja_id === id);
+const tot = i => (+i.qtd || 0) * (+i.valor || 0);
+const vendidoDe = itemId => vendas.filter(v => v.item_id === itemId).reduce((s, v) => s + v.qtd, 0);
+const resumo = id => {
+  const l = itensDa(id), v = vendasDa(id);
+  return { n: l.length, pecas: l.reduce((s, i) => s + (+i.qtd || 0), 0), total: l.reduce((s, i) => s + tot(i), 0), vendido: v.reduce((s, x) => s + x.qtd * x.valor, 0), pecasVend: v.reduce((s, x) => s + x.qtd, 0) };
+};
+const linkDa = loja => new URL("loja.html?t=" + loja.token, location.href).href;
+const novoToken = () => [...crypto.getRandomValues(new Uint8Array(12))].map(b => b.toString(16).padStart(2, "0")).join("");
+
+/* ---------- tela ---------- */
+function render() {
+  if (!lojas.find(l => l.id === ativa)) ativa = lojas[0]?.id ?? null;
+  try { if (ativa) localStorage.setItem("c3l-aba", ativa); } catch {}
+  $("gEstoque").textContent = brl.format(itens.reduce((s, i) => s + tot(i), 0));
+  $("gVendido").textContent = brl.format(vendas.reduce((s, v) => s + v.qtd * v.valor, 0));
+  $("pdfTodas").hidden = !lojas.length;
+
+  $("tabs").innerHTML = lojas.map(l => `<button class="tab" role="tab" aria-selected="${l.id === ativa}" data-loja="${l.id}">${esc(l.nome)}<span class="n">${itensDa(l.id).length}</span></button>`).join("")
+    + `<button class="tab add" id="novaLoja" type="button">+ Nova loja</button>`;
+  $("tabs").querySelectorAll("[data-loja]").forEach(b => b.onclick = () => { ativa = b.dataset.loja; editId = null; render(); });
+  $("novaLoja").onclick = novaLoja;
+
+  const p = $("panel");
+  if (!ativa) { p.innerHTML = `<div class="empty"><strong>Nenhuma loja ainda</strong>Clique em <b>+ Nova loja</b> para criar a aba da primeira loja parceira.</div>`; return; }
+  const loja = lojas.find(l => l.id === ativa), r = resumo(ativa), lista = itensDa(ativa), vend = vendasDa(ativa), ed = itens.find(i => i.id === editId);
+
+  p.innerHTML = `
+    <div class="storehead">
+      <h2>${esc(loja.nome)}</h2>
+      <div class="acts">
+        <button class="btn" id="linkLoja" type="button">Link da loja</button>
+        <button class="ghost" id="pdfLoja" type="button">Imprimir (PDF)</button>
+        <button class="link" id="renLoja" type="button">Renomear</button>
+        <button class="link red" id="delLoja" type="button">Excluir loja</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="lbl">Produtos</div><div class="val">${r.n}</div></div>
+      <div class="stat"><div class="lbl">Peças na loja</div><div class="val">${fmtQ(r.pecas)}</div></div>
+      <div class="stat"><div class="lbl">Valor na loja</div><div class="val m">${brl.format(r.total)}</div></div>
+      <div class="stat"><div class="lbl">Vendido</div><div class="val s">${brl.format(r.vendido)}</div></div>
+    </div>
+    <form class="item${ed ? " editing" : ""}" id="fItem" autocomplete="off">
+      <div class="field f-nome"><label for="iNome">Produto</label><input id="iNome" required maxlength="120" placeholder="Nome do produto" value="${esc(ed?.nome)}"></div>
+      <div class="field"><label for="iCod">Código</label><input id="iCod" class="num" maxlength="40" placeholder="Ex.: 0012" value="${esc(ed?.codigo)}"></div>
+      <div class="field"><label for="iQtd">Quantidade</label><input id="iQtd" class="num" inputmode="numeric" placeholder="0" value="${ed ? ed.qtd : ""}"></div>
+      <div class="field"><label for="iVal">Valor unit. (R$)</label><input id="iVal" class="num" inputmode="decimal" placeholder="0,00" value="${ed && +ed.valor ? String(ed.valor).replace(".", ",") : ""}"></div>
+      <div class="formbtns"><button class="btn" type="submit" id="iBtn">${ed ? "Salvar" : "Adicionar"}</button>${ed ? `<button class="ghost" type="button" id="cancelEd">Cancelar</button>` : ""}</div>
+      <div class="formtotal">${ed ? "Editando item" : "Novo item"} · Total do item: <b id="prevTotal">R$ 0,00</b></div>
+    </form>
+    ${lista.length ? `
+    <div class="tablebox"><table>
+      <thead><tr><th>Produto</th><th>Código</th><th class="r">Na loja</th><th class="r">Vendidos</th><th class="r">Valor unit.</th><th class="r">Total na loja</th><th></th></tr></thead>
+      <tbody>${lista.map(i => `<tr class="${i.id === editId ? "sel" : ""}">
+        <td class="nome">${esc(i.nome)}${+i.qtd === 0 ? `<span class="pill">esgotado</span>` : ""}</td>
+        <td class="code" data-l="Código">${esc(i.codigo) || "—"}</td>
+        <td class="r${+i.qtd === 0 ? " zero" : ""}" data-l="Na loja">${fmtQ(+i.qtd)}</td>
+        <td class="r" data-l="Vendidos">${fmtQ(vendidoDe(i.id))}</td>
+        <td class="r money" data-l="Unit.">${brl.format(+i.valor)}</td>
+        <td class="r total" data-l="Total">${brl.format(tot(i))}</td>
+        <td class="acts"><button class="link" data-ed="${i.id}" type="button">Editar</button><button class="link red" data-del="${i.id}" type="button">Excluir</button></td>
+      </tr>`).join("")}</tbody>
+      <tfoot><tr><td>Total na loja</td><td class="hm"></td><td class="r hm">${fmtQ(r.pecas)}</td><td class="r hm">${fmtQ(r.pecasVend)}</td><td class="hm"></td><td class="r total">${brl.format(r.total)}</td><td class="hm"></td></tr></tfoot>
+    </table></div>` : `<div class="empty"><strong>Nenhum produto nesta loja</strong>Preencha o formulário acima para registrar o primeiro item deixado aqui.</div>`}
+
+    <h3 class="sec">Vendas lançadas pela loja <small>${vend.length ? `${fmtQ(r.pecasVend)} peças · ${brl.format(r.vendido)}` : ""}</small></h3>
+    ${vend.length ? `<div class="tablebox"><table>
+      <thead><tr><th>Quando</th><th>Produto</th><th>Código</th><th class="r">Qtd</th><th class="r">Total</th><th></th></tr></thead>
+      <tbody>${vend.map(v => `<tr>
+        <td data-l="Quando">${dataHora(v.criado_em)}</td>
+        <td class="nome">${esc(v.nome)}</td>
+        <td class="code" data-l="Código">${esc(v.codigo) || "—"}</td>
+        <td class="r" data-l="Qtd">${fmtQ(v.qtd)}</td>
+        <td class="r sold" data-l="Total">${brl.format(v.qtd * v.valor)}</td>
+        <td class="acts"><button class="link red" data-undo="${v.id}" type="button">Desfazer</button></td>
+      </tr>`).join("")}</tbody></table></div>`
+      : `<div class="empty"><strong>Nenhuma venda lançada ainda</strong>Envie o <b>Link da loja</b> para a loja lançar pelo celular o que vender.</div>`}
+  `;
+
+  $("linkLoja").onclick = () => mostrarLink(loja);
+  $("pdfLoja").onclick = () => gerarPDF([loja]);
+  $("renLoja").onclick = async () => { const n = await dialog({ title: "Renomear loja", input: true, label: "Nome da loja", value: loja.nome, ok: "Salvar" }); if (n) comTrava(null, async () => { const { error } = await sb.from("lojas").update({ nome: n }).eq("id", loja.id); if (error) throw error; await carregar(); }); };
+  $("delLoja").onclick = async () => { if (await dialog({ title: `Excluir “${loja.nome}”?`, text: `A aba, os ${r.n} produtos e o histórico de vendas dela serão apagados, e o link da loja para de funcionar. Isso não pode ser desfeito.`, ok: "Excluir loja", danger: true })) comTrava(null, async () => { const { error } = await sb.from("lojas").delete().eq("id", loja.id); if (error) throw error; await carregar(); status("Loja excluída.", "ok"); }); };
+  p.querySelectorAll("[data-ed]").forEach(b => b.onclick = () => { editId = b.dataset.ed; render(); $("iNome").focus(); });
+  p.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    const it = itens.find(i => i.id === b.dataset.del);
+    if (await dialog({ title: "Excluir produto?", text: `${it.nome} (${fmtQ(it.qtd)} un.) sai da lista desta loja. As vendas já lançadas dele continuam no histórico.`, ok: "Excluir", danger: true }))
+      comTrava(null, async () => { const { error } = await sb.from("itens").delete().eq("id", it.id); if (error) throw error; if (editId === it.id) editId = null; await carregar(); });
+  });
+  p.querySelectorAll("[data-undo]").forEach(b => b.onclick = async () => {
+    const v = vendas.find(x => x.id === b.dataset.undo);
+    if (await dialog({ title: "Desfazer esta venda?", text: `${v.nome}: ${fmtQ(v.qtd)} un. voltam para a quantidade na loja e o registro sai do histórico.`, ok: "Desfazer venda", danger: true }))
+      comTrava(null, async () => { const { error } = await sb.rpc("admin_desfazer_venda", { p_venda: v.id }); if (error) throw error; await carregar(); status("Venda desfeita.", "ok"); });
+  });
+  if ($("cancelEd")) $("cancelEd").onclick = () => { editId = null; render(); };
+
+  const prev = () => $("prevTotal").textContent = brl.format(Math.round(parseNum($("iQtd").value)) * parseNum($("iVal").value));
+  $("iQtd").oninput = $("iVal").oninput = prev; prev();
+  $("fItem").onsubmit = async e => {
+    e.preventDefault();
+    const nome = $("iNome").value.trim(); if (!nome) return;
+    const dados = { loja_id: ativa, nome, codigo: $("iCod").value.trim(), qtd: Math.max(0, Math.round(parseNum($("iQtd").value))), valor: Math.max(0, Math.round(parseNum($("iVal").value) * 100) / 100) };
+    const ok = await comTrava($("iBtn"), async () => {
+      const { error } = ed ? await sb.from("itens").update(dados).eq("id", ed.id) : await sb.from("itens").insert(dados);
+      if (error) throw error;
+    });
+    if (ok) { editId = null; await carregar(); status(ed ? "Item salvo." : "Item adicionado.", "ok"); $("iNome").focus(); }
+  };
+}
+
+async function novaLoja() {
+  const nome = await dialog({ title: "Nova loja parceira", text: "Cada loja ganha uma aba própria e um link para lançar as vendas pelo celular.", input: true, label: "Nome da loja", ok: "Criar aba" });
+  if (!nome) return;
+  comTrava(null, async () => {
+    const { data, error } = await sb.from("lojas").insert({ nome }).select("id").single();
+    if (error) throw error;
+    ativa = data.id; editId = null; await carregar();
+  });
+}
+
+async function mostrarLink(loja) {
+  const url = linkDa(loja);
+  const msg = `Olá! Este é o link da ${loja.nome} para lançar as vendas dos produtos da Célula 3D. É só abrir no celular, sem instalar nada:\n${url}`;
+  const veil = document.createElement("div");
+  veil.className = "veil";
+  veil.innerHTML = `<div class="dialog" role="dialog" aria-modal="true">
+    <h3>Link da ${esc(loja.nome)}</h3>
+    <p>Envie para a loja. Quem tiver o link vê os produtos desta loja e lança vendas. Não vê as outras lojas e não muda preços.</p>
+    <div class="linkbox">${esc(url)}</div>
+    <div class="row" style="justify-content:flex-start">
+      <button class="btn" type="button" data-copy>Copiar link</button>
+      <a class="ghost" style="text-decoration:none;display:inline-block" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msg)}">Enviar pelo WhatsApp</a>
+      <a class="ghost" style="text-decoration:none;display:inline-block" target="_blank" rel="noopener" href="${esc(url)}">Abrir</a>
+    </div>
+    <p style="font-size:.85rem">Se o link vazar ou a parceria acabar, gere um novo: o antigo para de funcionar na hora.</p>
+    <div class="row"><button class="link red" type="button" data-new>Gerar link novo</button><button class="ghost" type="button" data-x>Fechar</button></div>
+  </div>`;
+  document.body.appendChild(veil);
+  const fechar = () => veil.remove();
+  veil.querySelector("[data-x]").onclick = fechar;
+  veil.querySelector("[data-copy]").onclick = async e => { e.target.textContent = (await copiar(url)) ? "Copiado ✓" : "Selecione e copie"; };
+  veil.querySelector("[data-new]").onclick = async () => {
+    fechar();
+    if (!(await dialog({ title: "Gerar link novo?", text: `O link atual da ${loja.nome} para de funcionar. Você vai precisar enviar o novo para a loja.`, ok: "Gerar link novo", danger: true }))) return;
+    comTrava(null, async () => { const { error } = await sb.from("lojas").update({ token: novoToken() }).eq("id", loja.id); if (error) throw error; await carregar(); mostrarLink(lojas.find(l => l.id === loja.id)); });
+  };
+}
+
+/* ---------- PDF ---------- */
+function gerarPDF(lista) {
+  if (!window.jspdf) { status("Não foi possível carregar o gerador de PDF. Recarregue a página.", "err"); return; }
+  const doc = new window.jspdf.jsPDF({ unit: "mm", format: "a4" });
+  const hoje = new Date().toLocaleDateString("pt-BR");
+  const azul = [21, 97, 214], ciano = [11, 122, 143];
+  const base = { theme: "grid", styles: { font: "helvetica", fontSize: 10, cellPadding: 2.2, lineColor: [210, 219, 231], textColor: [17, 26, 38] }, headStyles: { fillColor: azul, textColor: 255, fontStyle: "bold" }, footStyles: { fillColor: [229, 235, 243], textColor: ciano, fontStyle: "bold" } };
+  const dir = from => ({ columnStyles: Object.fromEntries([...Array(8).keys()].filter(k => k >= from).map(k => [k, { halign: "right" }])), didParseCell: d => { if ((d.section !== "body") && d.column.index >= from) d.cell.styles.halign = "right"; } });
+  const cab = (titulo, linha2) => {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.setTextColor(17, 26, 38); doc.text(titulo, 14, 20);
+    doc.setFontSize(9); doc.setTextColor(...azul); doc.text("CÉLULA 3D · IMPRESSÃO 3D", 196, 20, { align: "right" });
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(86, 101, 122); doc.text(linha2, 14, 27);
+  };
+  lista.forEach((loja, idx) => {
+    if (idx) doc.addPage();
+    const its = itensDa(loja.id), r = resumo(loja.id);
+    cab(loja.nome, `Produtos deixados para venda · emitido em ${hoje}`);
+    doc.text(`${r.n} produtos · ${fmtQ(r.pecas)} peças na loja · ${brl.format(r.total)} · vendido até hoje ${brl.format(r.vendido)}`, 14, 33);
+    doc.autoTable({ ...base, ...dir(2), startY: 39,
+      head: [["Produto", "Código", "Qtd", "Valor unit.", "Total"]],
+      body: its.map(i => [i.nome, i.codigo || "-", fmtQ(+i.qtd), brl.format(+i.valor), brl.format(tot(i))]),
+      foot: [["Total na loja", "", fmtQ(r.pecas), "", brl.format(r.total)]] });
+    const y = doc.lastAutoTable.finalY + 22;
+    if (y < 275) { doc.setDrawColor(150); doc.line(14, y, 90, y); doc.line(116, y, 196, y); doc.setFontSize(9); doc.text("Responsável pela loja", 14, y + 5); doc.text("Data", 116, y + 5); }
+  });
+  if (lista.length > 1) {
+    doc.addPage();
+    cab("Resumo de todas as lojas", `Emitido em ${hoje}`);
+    const t = lista.reduce((s, l) => { const r = resumo(l.id); s.n += r.n; s.p += r.pecas; s.t += r.total; s.v += r.vendido; return s; }, { n: 0, p: 0, t: 0, v: 0 });
+    doc.autoTable({ ...base, ...dir(1), startY: 33,
+      head: [["Loja", "Produtos", "Peças", "Na loja", "Vendido"]],
+      body: lista.map(l => { const r = resumo(l.id); return [l.nome, r.n, fmtQ(r.pecas), brl.format(r.total), brl.format(r.vendido)]; }),
+      foot: [["Total geral", t.n, fmtQ(t.p), brl.format(t.t), brl.format(t.v)]] });
+  }
+  const nome = (lista.length > 1 ? "todas-as-lojas" : lista[0].nome).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w-]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+  doc.save(`${nome}-${hoje.replace(/\//g, "-")}.pdf`);
+}
+$("pdfTodas").onclick = () => gerarPDF([...lojas]);
+
+/* ---------- entrada ---------- */
+async function entrar() {
+  const { data: ehDono, error } = await sb.rpc("eh_admin");
+  if (error) throw error;
+  if (!ehDono) { status("Esta conta não é a do dono. Saia e entre com o e-mail certo.", "err"); $("app").hidden = true; $("login").hidden = true; return; }
+  $("login").hidden = true; $("app").hidden = false; status("");
+  await carregar();
+  sb.channel("mudancas")
+    .on("postgres_changes", { event: "*", schema: "public", table: "vendas" }, recarregarLogo)
+    .on("postgres_changes", { event: "*", schema: "public", table: "itens" }, recarregarLogo)
+    .subscribe();
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) recarregarLogo(); });
+}
+
+$("login").onsubmit = async e => {
+  e.preventDefault();
+  const ok = await comTrava($("lBtn"), async () => {
+    const { error } = await sb.auth.signInWithPassword({ email: $("lEmail").value.trim(), password: $("lSenha").value });
+    if (error) throw error;
+  });
+  if (ok) entrar().catch(err => status(msgErro(err), "err"));
+};
+$("sair").onclick = async () => { await sb.auth.signOut(); location.reload(); };
+
+if (!configurado) {
+  status("Falta ligar o banco de dados: preencha o arquivo config.js com o endereço e a chave do Supabase.", "err");
+} else {
+  const { data } = await sb.auth.getSession();
+  if (data.session) entrar().catch(err => status(msgErro(err), "err"));
+  else $("login").hidden = false;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+# Mantém os projetos do Supabase acordados: no plano gratuito, um projeto
+# pausa depois de 7 dias sem uso. Roda todo dia na nuvem do GitHub, então
+# funciona com o computador desligado.
+name: Manter Supabase ligado
+
+on:
+  schedule:
+    - cron: "17 11 * * *"   # todo dia, 08:17 em Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Célula 3D Lojas
+        run: |
+          curl -sS -f -X POST "https://zxrckfodzdoaoelgkbsb.supabase.co/rest/v1/rpc/loja_dados" \
+            -H "apikey: sb_publishable_mCzdGc-Qg8zlG1pi3hq-2A_iUVDhBbN" \
+            -H "Content-Type: application/json" -d '{"p_token":"ping"}'
+      - name: Marcenaria (Bancada)
+        run: |
+          curl -sS -f "https://ttsvokeclvuendqkpwlc.supabase.co/rest/v1/empresas?select=id&limit=1" \
+            -H "apikey: sb_publishable_bjAojihh-Y5vU_j_uaFJ3g_G5LTdp0Z"
+
+      # O GitHub desliga tarefas agendadas de repositórios parados há 60 dias.
+      # Uma vez por mês esta tarefa grava a data, e o repositório nunca fica parado.
+      - uses: actions/checkout@v4
+        if: github.event_name == 'schedule'
+      - name: Registro mensal
+        if: github.event_name == 'schedule'
+        run: |
+          if [ "$(date -u +%d)" = "01" ]; then
+            date -u +%Y-%m-%d > .ultimo-ping
+            git config user.name "manter-ligado"
+            git config user.email "actions@users.noreply.github.com"
+            git add .ultimo-ping && git commit -m "Registro mensal do manter-ligado" && git push
+          fi
