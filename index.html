@@ -60,6 +60,12 @@ tfoot td{font-weight:600;border-bottom:none}
 #login{max-width:380px;margin:8vh auto 0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:14px}
 #login .brand{justify-content:center;flex-direction:column;text-align:center}
 #login .logo{width:84px;height:84px}
+.linkbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:var(--accent-soft);border-radius:var(--r);padding:10px 12px}
+.linkbar .lbl{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.linkbar .url{flex:1 1 260px;min-width:0;font-family:var(--mono);font-size:.82rem;color:var(--fg);word-break:break-all;text-decoration:none}
+.linkbar .url:hover{text-decoration:underline}
+.linkbar .lbtns{display:flex;gap:6px}
+.linkbar .ghost{background:var(--surface);text-decoration:none;font-size:.88rem;padding:6px 12px}
 .linkbox{font-family:var(--mono);font-size:.8rem;background:var(--sunk);padding:10px;border-radius:6px;word-break:break-all;user-select:all}
 
 @media (max-width:720px){
@@ -171,10 +177,18 @@ function render() {
     <div class="storehead">
       <h2>${esc(loja.nome)}</h2>
       <div class="acts">
-        <button class="btn" id="linkLoja" type="button">Link da loja</button>
+        <button class="ghost" id="linkLoja" type="button">Gerar link novo…</button>
         <button class="ghost" id="pdfLoja" type="button">Imprimir (PDF)</button>
         <button class="link" id="renLoja" type="button">Renomear</button>
         <button class="link red" id="delLoja" type="button">Excluir loja</button>
+      </div>
+    </div>
+    <div class="linkbar">
+      <span class="lbl">Link da loja</span>
+      <a class="url" href="${esc(linkDa(loja))}" target="_blank" rel="noopener">${esc(linkDa(loja))}</a>
+      <div class="lbtns">
+        <button class="ghost" id="copiarLink" type="button">Copiar</button>
+        <a class="ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msgLink(loja))}">WhatsApp</a>
       </div>
     </div>
     <div class="stats">
@@ -221,6 +235,7 @@ function render() {
   `;
 
   $("linkLoja").onclick = () => mostrarLink(loja);
+  $("copiarLink").onclick = async e => { const ok = await copiar(linkDa(loja)); e.target.textContent = ok ? "Copiado ✓" : "Selecione e copie"; setTimeout(() => { e.target.textContent = "Copiar"; }, 2500); };
   $("pdfLoja").onclick = () => gerarPDF([loja]);
   $("renLoja").onclick = async () => { const n = await dialog({ title: "Renomear loja", input: true, label: "Nome da loja", value: loja.nome, ok: "Salvar" }); if (n) comTrava(null, async () => { const { error } = await sb.from("lojas").update({ nome: n }).eq("id", loja.id); if (error) throw error; await carregar(); }); };
   $("delLoja").onclick = async () => { if (await dialog({ title: `Excluir “${loja.nome}”?`, text: `A aba, os ${r.n} produtos e o histórico de vendas dela serão apagados, e o link da loja para de funcionar. Isso não pode ser desfeito.`, ok: "Excluir loja", danger: true })) comTrava(null, async () => { const { error } = await sb.from("lojas").delete().eq("id", loja.id); if (error) throw error; await carregar(); status("Loja excluída.", "ok"); }); };
@@ -261,9 +276,11 @@ async function novaLoja() {
   });
 }
 
+const msgLink = loja => `Olá! Este é o link da ${loja.nome} para lançar as vendas dos produtos da Célula 3D. É só abrir no celular, sem instalar nada:\n${linkDa(loja)}`;
+
 async function mostrarLink(loja) {
   const url = linkDa(loja);
-  const msg = `Olá! Este é o link da ${loja.nome} para lançar as vendas dos produtos da Célula 3D. É só abrir no celular, sem instalar nada:\n${url}`;
+  const msg = msgLink(loja);
   const veil = document.createElement("div");
   veil.className = "veil";
   veil.innerHTML = `<div class="dialog" role="dialog" aria-modal="true">
