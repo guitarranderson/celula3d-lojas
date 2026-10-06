@@ -117,6 +117,7 @@ tfoot td{font-weight:600;border-bottom:none}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 import { sb, configurado, brl, fmtQ, $, esc, parseNum, dataHora, msgErro, dialog, copiar } from "./comum.js?v=1";
 
@@ -188,6 +189,7 @@ function render() {
       <a class="url" href="${esc(linkDa(loja))}" target="_blank" rel="noopener">${esc(linkDa(loja))}</a>
       <div class="lbtns">
         <button class="ghost" id="copiarLink" type="button">Copiar</button>
+        <button class="ghost" id="qrLink" type="button">QR Code</button>
         <a class="ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msgLink(loja))}">WhatsApp</a>
       </div>
     </div>
@@ -235,7 +237,8 @@ function render() {
   `;
 
   $("linkLoja").onclick = () => mostrarLink(loja);
-  $("copiarLink").onclick = async e => { const ok = await copiar(linkDa(loja)); e.target.textContent = ok ? "Copiado ✓" : "Selecione e copie"; setTimeout(() => { e.target.textContent = "Copiar"; }, 2500); };
+  $("qrLink").onclick = () => mostrarQR(loja);
+  $("copiarLink").onclick =async e => { const ok = await copiar(linkDa(loja)); e.target.textContent = ok ? "Copiado ✓" : "Selecione e copie"; setTimeout(() => { e.target.textContent = "Copiar"; }, 2500); };
   $("pdfLoja").onclick = () => gerarPDF([loja]);
   $("renLoja").onclick = async () => { const n = await dialog({ title: "Renomear loja", input: true, label: "Nome da loja", value: loja.nome, ok: "Salvar" }); if (n) comTrava(null, async () => { const { error } = await sb.from("lojas").update({ nome: n }).eq("id", loja.id); if (error) throw error; await carregar(); }); };
   $("delLoja").onclick = async () => { if (await dialog({ title: `Excluir “${loja.nome}”?`, text: `A aba, os ${r.n} produtos e o histórico de vendas dela serão apagados, e o link da loja para de funcionar. Isso não pode ser desfeito.`, ok: "Excluir loja", danger: true })) comTrava(null, async () => { const { error } = await sb.from("lojas").delete().eq("id", loja.id); if (error) throw error; await carregar(); status("Loja excluída.", "ok"); }); };
@@ -303,6 +306,61 @@ async function mostrarLink(loja) {
     fechar();
     if (!(await dialog({ title: "Gerar link novo?", text: `O link atual da ${loja.nome} para de funcionar. Você vai precisar enviar o novo para a loja.`, ok: "Gerar link novo", danger: true }))) return;
     comTrava(null, async () => { const { error } = await sb.from("lojas").update({ token: novoToken() }).eq("id", loja.id); if (error) throw error; await carregar(); mostrarLink(lojas.find(l => l.id === loja.id)); });
+  };
+}
+
+/* ---------- QR Code: cartão para imprimir e deixar no balcão da loja ---------- */
+function carregarImg(src) { return new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = erro; i.src = src; }); }
+
+async function cartaoQR(loja) {
+  const tmp = document.createElement("div");
+  new QRCode(tmp, { text: linkDa(loja), width: 600, height: 600, correctLevel: QRCode.CorrectLevel.M });
+  const qr = tmp.querySelector("canvas");
+  const logo = await carregarImg("logo.png").catch(() => null);
+  const W = 800, H = 1100, c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const g = c.getContext("2d");
+  g.fillStyle = "#ffffff"; g.fillRect(0, 0, W, H);
+  g.fillStyle = "#07090d"; g.fillRect(0, 0, W, 170);
+  if (logo) g.drawImage(logo, 40, 25, 120, 120);
+  g.fillStyle = "#ffffff"; g.font = "700 46px 'Bricolage Grotesque', 'Segoe UI', sans-serif"; g.fillText("Célula 3D", 185, 82);
+  g.fillStyle = "#2e8bff"; g.font = "600 26px 'IBM Plex Sans', 'Segoe UI', sans-serif"; g.fillText("IMPRESSÃO 3D", 187, 124);
+  g.textAlign = "center"; g.fillStyle = "#111a26";
+  g.font = "700 44px 'Bricolage Grotesque', 'Segoe UI', sans-serif"; g.fillText(loja.nome, W / 2, 245, W - 80);
+  g.fillStyle = "#56657a"; g.font = "28px 'IBM Plex Sans', 'Segoe UI', sans-serif";
+  g.fillText("Lançar vendas dos produtos Célula 3D", W / 2, 292);
+  g.drawImage(qr, 100, 330, 600, 600);
+  g.fillStyle = "#111a26"; g.font = "600 30px 'IBM Plex Sans', 'Segoe UI', sans-serif";
+  g.fillText("Aponte a câmera do celular para o código", W / 2, 990);
+  g.fillStyle = "#56657a"; g.font = "24px 'IBM Plex Sans', 'Segoe UI', sans-serif";
+  g.fillText("Toque no produto vendido, informe a quantidade e confirme.", W / 2, 1035);
+  return c;
+}
+
+const nomeArquivo = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w-]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+
+async function mostrarQR(loja) {
+  if (!window.QRCode) { status("Não foi possível carregar o gerador de QR Code. Recarregue a página.", "err"); return; }
+  const c = await cartaoQR(loja), png = c.toDataURL("image/png");
+  const veil = document.createElement("div");
+  veil.className = "veil";
+  veil.innerHTML = `<div class="dialog" role="dialog" aria-modal="true">
+    <h3>QR Code da ${esc(loja.nome)}</h3>
+    <p>Imprima e deixe no balcão: a loja aponta a câmera do celular e já abre a página de lançar vendas.</p>
+    <img src="${png}" alt="Cartão com QR Code da ${esc(loja.nome)}" style="width:100%;border:1px solid var(--line);border-radius:8px">
+    <div class="row"><button class="ghost" type="button" data-x>Fechar</button><a class="ghost" style="text-decoration:none" download="qrcode-${nomeArquivo(loja.nome)}.png" href="${png}">Baixar imagem</a><button class="btn" type="button" data-print>Imprimir</button></div>
+  </div>`;
+  document.body.appendChild(veil);
+  veil.querySelector("[data-x]").onclick = () => veil.remove();
+  veil.onclick = e => { if (e.target === veil) veil.remove(); };
+  veil.querySelector("[data-print]").onclick = () => {
+    const f = document.createElement("iframe");
+    f.style.cssText = "position:fixed;width:0;height:0;border:0;right:0;bottom:0";
+    document.body.appendChild(f);
+    f.contentDocument.write(`<!doctype html><title>QR ${esc(loja.nome)}</title><style>@page{size:A4;margin:15mm}body{margin:0;display:flex;justify-content:center}img{width:120mm}</style><img src="${png}">`);
+    f.contentDocument.close();
+    f.contentWindow.onafterprint = () => f.remove();
+    setTimeout(() => f.contentWindow.print(), 300);
   };
 }
 
