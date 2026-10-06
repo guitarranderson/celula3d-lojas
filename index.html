@@ -383,7 +383,7 @@ async function gerarPDF(lista) {
   const azul = [21, 97, 214], ciano = [11, 122, 143], tinta = [17, 26, 38], cinza = [86, 101, 122];
   const logo = await imgDataURL("logo.png").catch(() => null);
   const margem = { top: 32, bottom: 20, left: 14, right: 14 };
-  const base = { theme: "grid", margin: margem, styles: { font: "helvetica", fontSize: 10, cellPadding: 2.2, lineColor: [210, 219, 231], textColor: tinta }, headStyles: { fillColor: azul, textColor: 255, fontStyle: "bold" }, footStyles: { fillColor: [229, 235, 243], textColor: ciano, fontStyle: "bold" } };
+  const base = { theme: "grid", margin: margem, styles: { font: "helvetica", fontSize: 9.5, cellPadding: 1.6, lineColor: [210, 219, 231], textColor: tinta }, headStyles: { fillColor: azul, textColor: 255, fontStyle: "bold" }, footStyles: { fillColor: [229, 235, 243], textColor: ciano, fontStyle: "bold" } };
   const dir = from => ({ columnStyles: Object.fromEntries([...Array(8).keys()].filter(k => k >= from).map(k => [k, { halign: "right" }])), didParseCell: d => { if ((d.section !== "body") && d.column.index >= from) d.cell.styles.halign = "right"; } });
   const titulo = (txt, y, larg) => { doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.setTextColor(...tinta); doc.text(txt, 14, y, { maxWidth: larg }); };
   const linha = (txt, y) => { doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...cinza); doc.text(txt, 14, y); };
@@ -404,8 +404,8 @@ async function gerarPDF(lista) {
       head: [["Produto", "Código", "Qtd", "Valor unit.", "Total"]],
       body: its.map(i => [i.nome, i.codigo || "-", fmtQ(+i.qtd), brl.format(+i.valor), brl.format(tot(i))]),
       foot: [["Total na loja", "", fmtQ(r.pecas), "", brl.format(r.total)]] });
-    let y = doc.lastAutoTable.finalY + 22;
-    if (y > 270) { doc.addPage(); y = 50; }
+    let y = doc.lastAutoTable.finalY + 18;
+    if (y > 274) { doc.addPage(); y = 50; }
     doc.setDrawColor(150); doc.line(14, y, 90, y); doc.line(116, y, 196, y);
     doc.setFontSize(9); doc.setTextColor(...cinza); doc.text("Responsável pela loja", 14, y + 5); doc.text("Data", 116, y + 5);
   });
