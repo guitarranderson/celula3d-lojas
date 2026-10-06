@@ -364,42 +364,78 @@ async function mostrarQR(loja) {
   };
 }
 
-/* ---------- PDF ---------- */
-function gerarPDF(lista) {
-  if (!window.jspdf) { status("Não foi possível carregar o gerador de PDF. Recarregue a página.", "err"); return; }
+/* ---------- PDF: folha timbrada da Célula 3D, com o QR Code da loja ---------- */
+async function imgDataURL(src) {
+  const i = await carregarImg(src), c = document.createElement("canvas");
+  c.width = i.naturalWidth; c.height = i.naturalHeight; c.getContext("2d").drawImage(i, 0, 0);
+  return c.toDataURL("image/png");
+}
+function qrDataURL(texto) {
+  const tmp = document.createElement("div");
+  new QRCode(tmp, { text: texto, width: 400, height: 400, correctLevel: QRCode.CorrectLevel.M });
+  return tmp.querySelector("canvas").toDataURL("image/png");
+}
+
+async function gerarPDF(lista) {
+  if (!window.jspdf || !window.QRCode) { status("Não foi possível carregar o gerador de PDF. Recarregue a página.", "err"); return; }
   const doc = new window.jspdf.jsPDF({ unit: "mm", format: "a4" });
   const hoje = new Date().toLocaleDateString("pt-BR");
-  const azul = [21, 97, 214], ciano = [11, 122, 143];
-  const base = { theme: "grid", styles: { font: "helvetica", fontSize: 10, cellPadding: 2.2, lineColor: [210, 219, 231], textColor: [17, 26, 38] }, headStyles: { fillColor: azul, textColor: 255, fontStyle: "bold" }, footStyles: { fillColor: [229, 235, 243], textColor: ciano, fontStyle: "bold" } };
+  const azul = [21, 97, 214], ciano = [11, 122, 143], tinta = [17, 26, 38], cinza = [86, 101, 122];
+  const logo = await imgDataURL("logo.png").catch(() => null);
+  const margem = { top: 32, bottom: 20, left: 14, right: 14 };
+  const base = { theme: "grid", margin: margem, styles: { font: "helvetica", fontSize: 10, cellPadding: 2.2, lineColor: [210, 219, 231], textColor: tinta }, headStyles: { fillColor: azul, textColor: 255, fontStyle: "bold" }, footStyles: { fillColor: [229, 235, 243], textColor: ciano, fontStyle: "bold" } };
   const dir = from => ({ columnStyles: Object.fromEntries([...Array(8).keys()].filter(k => k >= from).map(k => [k, { halign: "right" }])), didParseCell: d => { if ((d.section !== "body") && d.column.index >= from) d.cell.styles.halign = "right"; } });
-  const cab = (titulo, linha2) => {
-    doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.setTextColor(17, 26, 38); doc.text(titulo, 14, 20);
-    doc.setFontSize(9); doc.setTextColor(...azul); doc.text("CÉLULA 3D · IMPRESSÃO 3D", 196, 20, { align: "right" });
-    doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(86, 101, 122); doc.text(linha2, 14, 27);
-  };
+  const titulo = (txt, y, larg) => { doc.setFont("helvetica", "bold"); doc.setFontSize(18); doc.setTextColor(...tinta); doc.text(txt, 14, y, { maxWidth: larg }); };
+  const linha = (txt, y) => { doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.setTextColor(...cinza); doc.text(txt, 14, y); };
+
   lista.forEach((loja, idx) => {
     if (idx) doc.addPage();
     const its = itensDa(loja.id), r = resumo(loja.id);
-    cab(loja.nome, `Produtos deixados para venda · emitido em ${hoje}`);
-    doc.text(`${r.n} produtos · ${fmtQ(r.pecas)} peças na loja · ${brl.format(r.total)} · vendido até hoje ${brl.format(r.vendido)}`, 14, 33);
-    doc.autoTable({ ...base, ...dir(2), startY: 39,
+    titulo(loja.nome, 38, 135);
+    linha(`Produtos deixados para venda · emitido em ${hoje}`, 46);
+    linha(`${r.n} produtos · ${fmtQ(r.pecas)} peças na loja · ${brl.format(r.total)}`, 52);
+    linha(`Vendido até hoje: ${brl.format(r.vendido)}`, 58);
+    // QR Code da loja, no canto
+    doc.addImage(qrDataURL(linkDa(loja)), "PNG", 160, 30, 36, 36);
+    doc.setFontSize(7.5); doc.setTextColor(...cinza);
+    doc.text("Aponte a câmera para", 178, 70, { align: "center" });
+    doc.text("lançar as vendas", 178, 73.5, { align: "center" });
+    doc.autoTable({ ...base, ...dir(2), startY: 79,
       head: [["Produto", "Código", "Qtd", "Valor unit.", "Total"]],
       body: its.map(i => [i.nome, i.codigo || "-", fmtQ(+i.qtd), brl.format(+i.valor), brl.format(tot(i))]),
       foot: [["Total na loja", "", fmtQ(r.pecas), "", brl.format(r.total)]] });
-    const y = doc.lastAutoTable.finalY + 22;
-    if (y < 275) { doc.setDrawColor(150); doc.line(14, y, 90, y); doc.line(116, y, 196, y); doc.setFontSize(9); doc.text("Responsável pela loja", 14, y + 5); doc.text("Data", 116, y + 5); }
+    let y = doc.lastAutoTable.finalY + 22;
+    if (y > 270) { doc.addPage(); y = 50; }
+    doc.setDrawColor(150); doc.line(14, y, 90, y); doc.line(116, y, 196, y);
+    doc.setFontSize(9); doc.setTextColor(...cinza); doc.text("Responsável pela loja", 14, y + 5); doc.text("Data", 116, y + 5);
   });
   if (lista.length > 1) {
     doc.addPage();
-    cab("Resumo de todas as lojas", `Emitido em ${hoje}`);
+    titulo("Resumo de todas as lojas", 38, 180);
+    linha(`Emitido em ${hoje}`, 46);
     const t = lista.reduce((s, l) => { const r = resumo(l.id); s.n += r.n; s.p += r.pecas; s.t += r.total; s.v += r.vendido; return s; }, { n: 0, p: 0, t: 0, v: 0 });
-    doc.autoTable({ ...base, ...dir(1), startY: 33,
+    doc.autoTable({ ...base, ...dir(1), startY: 53,
       head: [["Loja", "Produtos", "Peças", "Na loja", "Vendido"]],
       body: lista.map(l => { const r = resumo(l.id); return [l.nome, r.n, fmtQ(r.pecas), brl.format(r.total), brl.format(r.vendido)]; }),
       foot: [["Total geral", t.n, fmtQ(t.p), brl.format(t.t), brl.format(t.v)]] });
   }
-  const nome = (lista.length > 1 ? "todas-as-lojas" : lista[0].nome).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w-]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
-  doc.save(`${nome}-${hoje.replace(/\//g, "-")}.pdf`);
+
+  // Timbre em todas as páginas: faixa escura com o logo no topo, rodapé com a marca e a página
+  const total = doc.getNumberOfPages();
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p);
+    doc.setFillColor(7, 9, 13); doc.rect(0, 0, 210, 24, "F");
+    doc.setFillColor(...azul); doc.rect(0, 24, 210, 1.2, "F");
+    if (logo) doc.addImage(logo, "PNG", 12, 3, 18, 18);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.setTextColor(255, 255, 255); doc.text("Célula 3D", 34, 12.5);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(46, 139, 255); doc.text("IMPRESSÃO 3D", 34, 18);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(180, 190, 205); doc.text("Peças nas lojas parceiras", 198, 14.5, { align: "right" });
+    doc.setDrawColor(210, 219, 231); doc.line(14, 284, 196, 284);
+    doc.setFontSize(8); doc.setTextColor(...cinza);
+    doc.text("Célula 3D · Impressão 3D", 14, 289);
+    doc.text(`Página ${p} de ${total}`, 196, 289, { align: "right" });
+  }
+  doc.save(`${nomeArquivo(lista.length > 1 ? "todas-as-lojas" : lista[0].nome)}-${hoje.replace(/\//g, "-")}.pdf`);
 }
 $("pdfTodas").onclick = () => gerarPDF([...lojas]);
 
