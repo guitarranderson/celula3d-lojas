@@ -137,7 +137,7 @@ tfoot td{font-weight:600;border-bottom:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
-import { sb, configurado, brl, fmtQ, $, esc, parseNum, dataHora, msgErro, dialog, copiar, fotoURL, reduzirFoto } from "./comum.js?v=3";
+import { sb, configurado, brl, fmtQ, $, esc, parseNum, dataHora, msgErro, dialog, copiar, fotoURL, reduzirFoto } from "./comum.js?v=4";
 
 let lojas = [], itens = [], vendas = [], ativa = null, editId = null;
 let fotoNova = null, fotoNovaURL = "", fotoRemover = false; // foto escolhida no formulário, ainda não enviada
@@ -204,21 +204,22 @@ function render() {
     <div class="storehead">
       <h2>${esc(loja.nome)}</h2>
       <div class="acts">
-        ${deposito ? "" : `<button class="ghost" id="linkLoja" type="button">Gerar link novo…</button>`}
+        <button class="ghost" id="linkLoja" type="button">Gerar link novo…</button>
         <button class="ghost" id="pdfLoja" type="button">Imprimir (PDF)</button>
         <button class="link" id="renLoja" type="button">Renomear</button>
         <button class="link red" id="delLoja" type="button">Excluir loja</button>
       </div>
     </div>
-    ${deposito ? `<div class="notice">Este é o seu <b>estoque</b>: use <b>Enviar</b> em cada produto para mandar peças para uma loja.</div>` : `<div class="linkbar">
-      <span class="lbl">Link da loja</span>
+    ${deposito ? `<div class="notice">Este é o seu <b>estoque</b>. Use <b>Enviar</b> em cada produto para mandar peças para uma loja. Pelo link abaixo, no celular, dá para cadastrar produto novo com foto e somar peças prontas.</div>` : ""}
+    <div class="linkbar">
+      <span class="lbl">${deposito ? "Link do estoque" : "Link da loja"}</span>
       <a class="url" href="${esc(linkDa(loja))}" target="_blank" rel="noopener">${esc(linkDa(loja))}</a>
       <div class="lbtns">
         <button class="ghost" id="copiarLink" type="button">Copiar</button>
         <button class="ghost" id="qrLink" type="button">QR Code</button>
         <a class="ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msgLink(loja))}">WhatsApp</a>
       </div>
-    </div>`}
+    </div>
     <div class="stats">
       <div class="stat"><div class="lbl">Produtos</div><div class="val">${r.n}</div></div>
       <div class="stat"><div class="lbl">Peças na loja</div><div class="val">${fmtQ(r.pecas)}</div></div>
@@ -268,11 +269,9 @@ function render() {
       : `<div class="empty"><strong>Nenhuma venda lançada ainda</strong>Envie o <b>Link da loja</b> para a loja lançar pelo celular o que vender.</div>`}
   `;
 
-  if (!deposito) {
   $("linkLoja").onclick = () => mostrarLink(loja);
   $("qrLink").onclick = () => mostrarQR(loja);
   $("copiarLink").onclick =async e => { const ok = await copiar(linkDa(loja)); e.target.textContent = ok ? "Copiado ✓" : "Selecione e copie"; setTimeout(() => { e.target.textContent = "Copiar"; }, 2500); };
-  }
   $("pdfLoja").onclick = () => gerarPDF([loja]);
   $("renLoja").onclick = async () => { const n = await dialog({ title: "Renomear loja", input: true, label: "Nome da loja", value: loja.nome, ok: "Salvar" }); if (n) comTrava(null, async () => { const { error } = await sb.from("lojas").update({ nome: n }).eq("id", loja.id); if (error) throw error; await carregar(); }); };
   $("delLoja").onclick = async () => { if (await dialog({ title: `Excluir “${loja.nome}”?`, text: `A aba, os ${r.n} produtos e o histórico de vendas dela serão apagados, e o link da loja para de funcionar. Isso não pode ser desfeito.`, ok: "Excluir loja", danger: true })) comTrava(null, async () => { const { error } = await sb.from("lojas").delete().eq("id", loja.id); if (error) throw error; await carregar(); status("Loja excluída.", "ok"); }); };
@@ -325,7 +324,9 @@ async function novaLoja() {
   });
 }
 
-const msgLink = loja => `Olá! Este é o link da ${loja.nome} para lançar as vendas dos produtos da Célula 3D. É só abrir no celular, sem instalar nada:\n${linkDa(loja)}`;
+const msgLink = loja => ehEstoque(loja)
+  ? `Link do estoque da Célula 3D, para cadastrar produtos e somar peças prontas pelo celular:\n${linkDa(loja)}`
+  : `Olá! Este é o link da ${loja.nome} para lançar as vendas dos produtos da Célula 3D. É só abrir no celular, sem instalar nada:\n${linkDa(loja)}`;
 
 async function mostrarLink(loja) {
   const url = linkDa(loja);
@@ -420,12 +421,12 @@ async function cartaoQR(loja) {
   g.textAlign = "center"; g.fillStyle = "#111a26";
   g.font = "700 44px 'Bricolage Grotesque', 'Segoe UI', sans-serif"; g.fillText(loja.nome, W / 2, 245, W - 80);
   g.fillStyle = "#56657a"; g.font = "28px 'IBM Plex Sans', 'Segoe UI', sans-serif";
-  g.fillText("Lançar vendas dos produtos Célula 3D", W / 2, 292);
+  g.fillText(ehEstoque(loja) ? "Cadastrar produtos e somar peças" : "Lançar vendas dos produtos Célula 3D", W / 2, 292);
   g.drawImage(qr, 100, 330, 600, 600);
   g.fillStyle = "#111a26"; g.font = "600 30px 'IBM Plex Sans', 'Segoe UI', sans-serif";
   g.fillText("Aponte a câmera do celular para o código", W / 2, 990);
   g.fillStyle = "#56657a"; g.font = "24px 'IBM Plex Sans', 'Segoe UI', sans-serif";
-  g.fillText("Toque no produto vendido, informe a quantidade e confirme.", W / 2, 1035);
+  g.fillText(ehEstoque(loja) ? "Toque em + Novo produto ou em um produto para somar peças." : "Toque no produto vendido, informe a quantidade e confirme.", W / 2, 1035);
   return c;
 }
 
@@ -491,7 +492,7 @@ async function gerarPDF(lista) {
     doc.addImage(qrDataURL(linkDa(loja)), "PNG", 160, 30, 36, 36);
     doc.setFontSize(7.5); doc.setTextColor(...cinza);
     doc.text("Aponte a câmera para", 178, 70, { align: "center" });
-    doc.text("lançar as vendas", 178, 73.5, { align: "center" });
+    doc.text(ehEstoque(loja) ? "cadastrar no estoque" : "lançar as vendas", 178, 73.5, { align: "center" });
     doc.autoTable({ ...base, ...dir(2), startY: 79,
       head: [["Produto", "Código", "Qtd", "Valor unit.", "Total"]],
       body: its.map(i => [i.nome, i.codigo || "-", fmtQ(+i.qtd), brl.format(+i.valor), brl.format(tot(i))]),

@@ -26,6 +26,11 @@ h1{font-size:1.35rem}
 .prod .f{grid-row:1/3;width:56px;height:56px;border-radius:8px;background:var(--sunk);overflow:hidden}
 .prod .f img{width:100%;height:100%;object-fit:cover;display:block}
 .sheet .big{width:100%;max-height:40vh;object-fit:contain;border-radius:12px;background:var(--sunk)}
+.btn.novo{padding:14px;font-size:1rem;border-radius:12px}
+.sheet .box{max-height:92vh;overflow:auto}
+.fotopick{width:96px;height:96px;border:1px dashed var(--line);border-radius:12px;background:var(--sunk);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;color:var(--accent);font-weight:600;align-self:center}
+.fotopick img{width:100%;height:100%;object-fit:cover}
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .prod .n{font-weight:600;font-size:1rem}
 .prod .c{font-family:var(--mono);font-size:.8rem;color:var(--muted)}
 .prod .p{font-family:var(--mono);color:var(--money);text-align:right}
@@ -61,16 +66,17 @@ h2{font-size:1.05rem;margin:8px 0 0}
   </div>
   <div id="status" class="notice" hidden></div>
   <div id="conteudo" hidden>
-    <p class="how">Vendeu um produto? Toque nele, informe a quantidade e confirme.</p>
+    <p class="how" id="how">Vendeu um produto? Toque nele, informe a quantidade e confirme.</p>
+    <button class="btn novo" id="novoProd" type="button" hidden>+ Novo produto</button>
     <input id="busca" type="search" placeholder="Buscar por nome ou código" autocomplete="off" aria-label="Buscar produto">
     <div class="lista" id="lista"></div>
-    <h2>Últimas vendas lançadas</h2>
+    <h2 id="histT">Últimas vendas lançadas</h2>
     <div id="hist"></div>
   </div>
 </div>
 
 <script type="module">
-import { sb, configurado, brl, fmtQ, $, esc, dataHora, msgErro, fotoURL } from "./comum.js?v=3";
+import { sb, configurado, brl, fmtQ, $, esc, dataHora, msgErro, fotoURL, parseNum, reduzirFoto } from "./comum.js?v=4";
 
 const token = new URLSearchParams(location.search).get("t") || "";
 let dados = null;
@@ -83,7 +89,10 @@ async function carregar() {
   if (error) throw error;
   if (!data) { $("nomeLoja").textContent = ""; $("conteudo").hidden = true; status("Este link não vale mais. Peça um link novo para a Célula 3D.", "err"); return; }
   dados = data;
-  $("nomeLoja").innerHTML = `Vendas da <b>${esc(data.nome)}</b>`;
+  const est = !!data.estoque;
+  $("nomeLoja").innerHTML = est ? `<b>${esc(data.nome)}</b> · cadastro de peças` : `Vendas da <b>${esc(data.nome)}</b>`;
+  $("how").textContent = est ? "Produziu peças? Toque no produto para somar. Produto novo? Use o botão abaixo." : "Vendeu um produto? Toque nele, informe a quantidade e confirme.";
+  $("novoProd").hidden = !est; $("histT").hidden = $("hist").hidden = est;
   document.title = `${data.nome} · Célula 3D`;
   $("conteudo").hidden = false; status("");
   render();
@@ -94,13 +103,13 @@ function render() {
   const its = dados.itens.filter(i => !q || i.nome.toLowerCase().includes(q) || (i.codigo || "").toLowerCase().includes(q))
     .sort((a, b) => (b.qtd > 0) - (a.qtd > 0) || a.nome.localeCompare(b.nome));
   $("lista").innerHTML = its.length ? its.map(i => `
-    <button class="prod" type="button" data-id="${i.id}" ${i.qtd > 0 ? "" : "disabled"}>
+    <button class="prod" type="button" data-id="${i.id}" ${i.qtd > 0 || dados.estoque ? "" : "disabled"}>
       <span class="f">${i.foto ? `<img src="${esc(fotoURL(i.foto))}" alt="" loading="lazy">` : ""}</span>
       <span class="n">${esc(i.nome)}</span><span class="p">${brl.format(i.valor)}</span>
-      <span class="c">${esc(i.codigo) || "sem código"}</span><span class="q">${i.qtd > 0 ? `${fmtQ(i.qtd)} na loja` : "esgotado"}</span>
+      <span class="c">${esc(i.codigo) || "sem código"}</span><span class="q">${dados.estoque ? `${fmtQ(i.qtd)} no estoque` : i.qtd > 0 ? `${fmtQ(i.qtd)} na loja` : "esgotado"}</span>
     </button>`).join("")
-    : `<div class="empty"><strong>${q ? "Nada encontrado" : "Nenhum produto ainda"}</strong>${q ? "Confira o nome ou o código." : "A Célula 3D ainda não cadastrou produtos para esta loja."}</div>`;
-  $("lista").querySelectorAll("[data-id]").forEach(b => b.onclick = () => vender(dados.itens.find(i => i.id === b.dataset.id)));
+    : `<div class="empty"><strong>${q ? "Nada encontrado" : "Nenhum produto ainda"}</strong>${q ? "Confira o nome ou o código." : dados.estoque ? "Toque em + Novo produto para cadastrar o primeiro." : "A Célula 3D ainda não cadastrou produtos para esta loja."}</div>`;
+  $("lista").querySelectorAll("[data-id]").forEach(b => b.onclick = () => (dados.estoque ? somar : vender)(dados.itens.find(i => i.id === b.dataset.id)));
   $("hist").innerHTML = dados.vendas.length
     ? `<div class="hist">${dados.vendas.map(v => `<div><span>${fmtQ(v.qtd)}× ${esc(v.nome)}</span><span class="t">${brl.format(v.qtd * v.valor)}</span><span class="d">${dataHora(v.criado_em)}</span></div>`).join("")}</div>`
     : `<div class="empty">Nenhuma venda lançada ainda.</div>`;
@@ -139,6 +148,87 @@ function vender(item) {
     } catch (e) { okB.disabled = false; upd(); status(msgErro(e), "err"); s.remove(); carregar().catch(() => {}); }
   };
 }
+
+/* ---------- modo Estoque ---------- */
+function folha(html) {
+  const s = document.createElement("div");
+  s.className = "sheet";
+  s.innerHTML = `<div class="box" role="dialog" aria-modal="true">${html}</div>`;
+  document.body.appendChild(s);
+  s.onclick = e => { if (e.target === s || e.target.hasAttribute("data-x")) s.remove(); };
+  return s;
+}
+
+function somar(item) {
+  const s = folha(`
+    ${item.foto ? `<img class="big" src="${esc(fotoURL(item.foto))}" alt="">` : ""}
+    <h3>${esc(item.nome)}</h3>
+    <p class="meta">${esc(item.codigo) || "sem código"} · ${brl.format(item.valor)} cada · ${fmtQ(item.qtd)} no estoque</p>
+    <div class="stepper"><button type="button" data-m aria-label="Menos">−</button><input id="sQtd" type="number" inputmode="numeric" min="1" value="1" aria-label="Peças prontas"><button type="button" data-p aria-label="Mais">+</button></div>
+    <div class="total"><span>Vai ficar com</span><b id="sTot"></b></div>
+    <button class="btn" type="button" data-ok>Somar</button>
+    <button class="ghost" type="button" data-x>Cancelar</button>`);
+  const inp = s.querySelector("#sQtd"), okB = s.querySelector("[data-ok]");
+  const q = () => Math.max(1, Math.round(+inp.value || 1));
+  const upd = () => { s.querySelector("#sTot").textContent = `${fmtQ(item.qtd + q())} peças`; okB.textContent = `Somar ${q()} ${q() > 1 ? "peças" : "peça"}`; };
+  s.querySelector("[data-m]").onclick = () => { inp.value = Math.max(1, q() - 1); upd(); };
+  s.querySelector("[data-p]").onclick = () => { inp.value = q() + 1; upd(); };
+  inp.oninput = upd; upd();
+  okB.onclick = async () => {
+    okB.disabled = true; okB.textContent = "Salvando…";
+    try {
+      const n = q();
+      const { error } = await sb.rpc("estoque_somar", { p_token: token, p_item: item.id, p_qtd: n });
+      if (error) throw error;
+      s.remove(); toast(`Somado: ${n}× ${item.nome} ✓`); $("busca").value = ""; await carregar();
+    } catch (e) { s.remove(); status(msgErro(e), "err"); carregar().catch(() => {}); }
+  };
+}
+
+function novoProduto() {
+  let foto = null, fotoUrl = "";
+  const s = folha(`
+    <h3>Novo produto no estoque</h3>
+    <label class="fotopick" for="nFoto"><span>+ foto</span></label>
+    <input id="nFoto" type="file" accept="image/*" hidden>
+    <div class="field"><label for="nNome">Produto</label><input id="nNome" maxlength="120" placeholder="Ex.: Vaso hexagonal"></div>
+    <div class="duo">
+      <div class="field"><label for="nCod">Código</label><input id="nCod" maxlength="40" placeholder="opcional"></div>
+      <div class="field"><label for="nQtd">Quantidade</label><input id="nQtd" type="number" inputmode="numeric" min="0" value="1"></div>
+    </div>
+    <div class="field"><label for="nVal">Valor de venda (R$)</label><input id="nVal" inputmode="decimal" placeholder="0,00"></div>
+    <button class="btn" type="button" data-ok>Cadastrar</button>
+    <button class="ghost" type="button" data-x>Cancelar</button>`);
+  const pick = s.querySelector(".fotopick"), okB = s.querySelector("[data-ok]");
+  s.querySelector("#nFoto").onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (fotoUrl) URL.revokeObjectURL(fotoUrl);
+    foto = f; fotoUrl = URL.createObjectURL(f);
+    pick.innerHTML = `<img src="${fotoUrl}" alt="">`;
+  };
+  s.querySelector("#nNome").focus();
+  okB.onclick = async () => {
+    const nome = s.querySelector("#nNome").value.trim();
+    if (!nome) { s.querySelector("#nNome").focus(); return; }
+    okB.disabled = true; okB.textContent = "Cadastrando…";
+    let caminho = "";
+    try {
+      if (foto) {
+        caminho = `${dados.pasta}/${crypto.randomUUID()}.jpg`;
+        const { error: eUp } = await sb.storage.from("fotos").upload(caminho, await reduzirFoto(foto), { contentType: "image/jpeg" });
+        if (eUp) throw eUp;
+      }
+      const { error } = await sb.rpc("estoque_adicionar", {
+        p_token: token, p_nome: nome, p_codigo: s.querySelector("#nCod").value.trim(),
+        p_qtd: Math.max(0, Math.round(+s.querySelector("#nQtd").value || 0)),
+        p_valor: Math.max(0, Math.round(parseNum(s.querySelector("#nVal").value) * 100) / 100), p_foto: caminho });
+      if (error) throw error;
+      if (fotoUrl) URL.revokeObjectURL(fotoUrl);
+      s.remove(); toast(`Cadastrado: ${nome} ✓`); await carregar();
+    } catch (e) { okB.disabled = false; okB.textContent = "Cadastrar"; status(msgErro(e), "err"); }
+  };
+}
+$("novoProd").onclick = novoProduto;
 
 $("busca").oninput = () => dados && render();
 document.addEventListener("visibilitychange", () => { if (!document.hidden && dados) carregar().catch(() => {}); });
