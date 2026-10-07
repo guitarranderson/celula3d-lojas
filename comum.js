@@ -4,7 +4,27 @@ import { SUPABASE_URL, SUPABASE_KEY } from "./config.js?v=1";
 export const configurado = Boolean(SUPABASE_URL && SUPABASE_KEY);
 export const sb = configurado ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-export const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+// Fotos dos produtos: guardadas no balde público "fotos" do Supabase
+export const fotoURL = caminho => caminho ? `${SUPABASE_URL}/storage/v1/object/public/fotos/${caminho}` : "";
+
+// Reduz a foto no próprio aparelho antes de enviar (lado maior 900 px, JPEG)
+export function reduzirFoto(arquivo, lado = 900) {
+  return new Promise((ok, erro) => {
+    const url = URL.createObjectURL(arquivo), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, lado / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? ok(b) : erro(new Error("foto_invalida")), "image/jpeg", 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); erro(new Error("foto_invalida")); };
+    img.src = url;
+  });
+}
+
+export const brl =new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 export const fmtQ = n => new Intl.NumberFormat("pt-BR").format(n);
 export const $ = id => document.getElementById(id);
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -22,6 +42,7 @@ const ERROS = {
   produto_nao_encontrado: "Esse produto não está mais na lista. Atualize a página.",
   quantidade_invalida: "Informe uma quantidade de pelo menos 1.",
   sem_permissao: "Sua conta não tem permissão para isso.",
+  foto_invalida: "Não consegui abrir essa foto. Tente outra imagem (JPG ou PNG).",
 };
 export function msgErro(e) {
   const m = String(e?.message || e || "");

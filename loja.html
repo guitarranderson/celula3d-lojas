@@ -21,8 +21,11 @@ h1{font-size:1.35rem}
 .how{font-size:.9rem;color:var(--muted);margin:0}
 #busca{font-size:1rem;padding:12px 14px;border-radius:10px}
 .lista{display:flex;flex-direction:column;gap:8px}
-.prod{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;text-align:left;width:100%;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.prod{display:grid;grid-template-columns:56px 1fr auto;gap:2px 12px;align-items:center;text-align:left;width:100%;background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
 .prod:active{background:var(--accent-soft)}
+.prod .f{grid-row:1/3;width:56px;height:56px;border-radius:8px;background:var(--sunk);overflow:hidden}
+.prod .f img{width:100%;height:100%;object-fit:cover;display:block}
+.sheet .big{width:100%;max-height:40vh;object-fit:contain;border-radius:12px;background:var(--sunk)}
 .prod .n{font-weight:600;font-size:1rem}
 .prod .c{font-family:var(--mono);font-size:.8rem;color:var(--muted)}
 .prod .p{font-family:var(--mono);color:var(--money);text-align:right}
@@ -67,7 +70,7 @@ h2{font-size:1.05rem;margin:8px 0 0}
 </div>
 
 <script type="module">
-import { sb, configurado, brl, fmtQ, $, esc, dataHora, msgErro } from "./comum.js?v=1";
+import { sb, configurado, brl, fmtQ, $, esc, dataHora, msgErro, fotoURL } from "./comum.js?v=2";
 
 const token = new URLSearchParams(location.search).get("t") || "";
 let dados = null;
@@ -92,6 +95,7 @@ function render() {
     .sort((a, b) => (b.qtd > 0) - (a.qtd > 0) || a.nome.localeCompare(b.nome));
   $("lista").innerHTML = its.length ? its.map(i => `
     <button class="prod" type="button" data-id="${i.id}" ${i.qtd > 0 ? "" : "disabled"}>
+      <span class="f">${i.foto ? `<img src="${esc(fotoURL(i.foto))}" alt="" loading="lazy">` : ""}</span>
       <span class="n">${esc(i.nome)}</span><span class="p">${brl.format(i.valor)}</span>
       <span class="c">${esc(i.codigo) || "sem código"}</span><span class="q">${i.qtd > 0 ? `${fmtQ(i.qtd)} na loja` : "esgotado"}</span>
     </button>`).join("")
@@ -106,6 +110,7 @@ function vender(item) {
   const s = document.createElement("div");
   s.className = "sheet";
   s.innerHTML = `<div class="box" role="dialog" aria-modal="true">
+    ${item.foto ? `<img class="big" src="${esc(fotoURL(item.foto))}" alt="">` : ""}
     <h3>${esc(item.nome)}</h3>
     <p class="meta">${esc(item.codigo) || "sem código"} · ${brl.format(item.valor)} cada · ${fmtQ(item.qtd)} na loja</p>
     <div class="stepper"><button type="button" data-m aria-label="Menos">−</button><input id="vQtd" type="number" inputmode="numeric" min="1" max="${item.qtd}" value="1" aria-label="Quantidade vendida"><button type="button" data-p aria-label="Mais">+</button></div>

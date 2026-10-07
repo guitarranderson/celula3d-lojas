@@ -34,8 +34,18 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
 .stat .val{font-family:var(--mono);font-size:1.15rem;font-variant-numeric:tabular-nums}
 .stat .val.m{color:var(--money)} .stat .val.s{color:var(--ok)}
 
-form.item{display:grid;grid-template-columns:2.2fr 1fr .8fr 1fr auto;gap:10px;align-items:end;background:var(--sunk);padding:14px;border-radius:var(--r)}
+form.item{display:grid;grid-template-columns:auto 2.2fr 1fr .8fr 1fr auto;gap:10px;align-items:end;background:var(--sunk);padding:14px;border-radius:var(--r)}
 form.item.editing{outline:2px solid var(--money)}
+.f-foto{align-items:center}
+.f-foto .flbl{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.fotopick{width:64px;height:64px;border:1px dashed var(--line);border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;color:var(--accent);font-size:.8rem;font-weight:600}
+.fotopick:hover{border-color:var(--accent)}
+.fotopick img{width:100%;height:100%;object-fit:cover}
+.f-foto .link{padding:0;font-size:.75rem}
+td.thumb{width:52px;padding:6px 4px 6px 10px}
+.thumbbtn{padding:0;border:0;background:none;display:block;border-radius:6px;overflow:hidden;width:42px;height:42px}
+.thumbbtn img{width:42px;height:42px;object-fit:cover;display:block}
+.nofoto{display:block;width:42px;height:42px;border-radius:6px;background:var(--sunk)}
 .formtotal{grid-column:1/-1;font-size:.88rem;color:var(--muted)}
 .formtotal b{font-family:var(--mono);color:var(--money);font-weight:500}
 .formbtns{display:flex;gap:6px}
@@ -71,6 +81,9 @@ tfoot td{font-weight:600;border-bottom:none}
 @media (max-width:720px){
   form.item{grid-template-columns:1fr 1fr}
   form.item .f-nome,form.item .formbtns{grid-column:1/-1}
+  form.item .f-foto{grid-column:1/-1;flex-direction:row;gap:12px}
+  tbody td.thumb{grid-row:1/3;padding:0;width:auto}
+  tbody tr:has(td.thumb){grid-template-columns:auto 1fr auto}
   form.item .formbtns .btn{flex:1}
   .stats{grid-template-columns:1fr 1fr}
   .grand{text-align:left;justify-content:flex-start}
@@ -119,9 +132,11 @@ tfoot td{font-weight:600;border-bottom:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
-import { sb, configurado, brl, fmtQ, $, esc, parseNum, dataHora, msgErro, dialog, copiar } from "./comum.js?v=1";
+import { sb, configurado, brl, fmtQ, $, esc, parseNum, dataHora, msgErro, dialog, copiar, fotoURL, reduzirFoto } from "./comum.js?v=2";
 
 let lojas = [], itens = [], vendas = [], ativa = null, editId = null;
+let fotoNova = null, fotoNovaURL = "", fotoRemover = false; // foto escolhida no formulário, ainda não enviada
+function limparFoto() { if (fotoNovaURL) URL.revokeObjectURL(fotoNovaURL); fotoNova = null; fotoNovaURL = ""; fotoRemover = false; }
 try { ativa = localStorage.getItem("c3l-aba"); } catch {}
 
 function status(msg, tipo) { const s = $("status"); s.hidden = !msg; s.textContent = msg || ""; s.className = "notice" + (tipo ? " " + tipo : ""); if (tipo === "ok") setTimeout(() => { if (s.textContent === msg) s.hidden = true; }, 3500); }
@@ -136,7 +151,7 @@ async function comTrava(btn, fn) {
 async function carregar() {
   const [a, b, c] = await Promise.all([
     sb.from("lojas").select("id,nome,token,criado_em").order("criado_em"),
-    sb.from("itens").select("id,loja_id,nome,codigo,qtd,valor,criado_em").order("criado_em"),
+    sb.from("itens").select("id,loja_id,nome,codigo,qtd,valor,foto,criado_em").order("criado_em"),
     sb.from("vendas").select("id,loja_id,item_id,nome,codigo,qtd,valor,criado_em").order("criado_em", { ascending: false }),
   ]);
   for (const r of [a, b, c]) if (r.error) throw r.error;
@@ -167,7 +182,7 @@ function render() {
 
   $("tabs").innerHTML = lojas.map(l => `<button class="tab" role="tab" aria-selected="${l.id === ativa}" data-loja="${l.id}">${esc(l.nome)}<span class="n">${itensDa(l.id).length}</span></button>`).join("")
     + `<button class="tab add" id="novaLoja" type="button">+ Nova loja</button>`;
-  $("tabs").querySelectorAll("[data-loja]").forEach(b => b.onclick = () => { ativa = b.dataset.loja; editId = null; render(); });
+  $("tabs").querySelectorAll("[data-loja]").forEach(b => b.onclick = () => { ativa = b.dataset.loja; editId = null; limparFoto(); render(); });
   $("novaLoja").onclick = novaLoja;
 
   const p = $("panel");
@@ -200,6 +215,11 @@ function render() {
       <div class="stat"><div class="lbl">Vendido</div><div class="val s">${brl.format(r.vendido)}</div></div>
     </div>
     <form class="item${ed ? " editing" : ""}" id="fItem" autocomplete="off">
+      <div class="field f-foto"><span class="flbl">Foto</span>
+        <label class="fotopick" for="iFoto" title="Escolher ou tirar foto">${(() => { const u = fotoNova ? fotoNovaURL : (!fotoRemover && ed?.foto ? fotoURL(ed.foto) : ""); return u ? `<img src="${esc(u)}" alt="">` : `<span>+ foto</span>`; })()}</label>
+        <input id="iFoto" type="file" accept="image/*" hidden>
+        ${(fotoNova || (!fotoRemover && ed?.foto)) ? `<button class="link red" type="button" id="semFoto">remover</button>` : ""}
+      </div>
       <div class="field f-nome"><label for="iNome">Produto</label><input id="iNome" required maxlength="120" placeholder="Nome do produto" value="${esc(ed?.nome)}"></div>
       <div class="field"><label for="iCod">Código</label><input id="iCod" class="num" maxlength="40" placeholder="Ex.: 0012" value="${esc(ed?.codigo)}"></div>
       <div class="field"><label for="iQtd">Quantidade</label><input id="iQtd" class="num" inputmode="numeric" placeholder="0" value="${ed ? ed.qtd : ""}"></div>
@@ -209,8 +229,9 @@ function render() {
     </form>
     ${lista.length ? `
     <div class="tablebox"><table>
-      <thead><tr><th>Produto</th><th>Código</th><th class="r">Na loja</th><th class="r">Vendidos</th><th class="r">Valor unit.</th><th class="r">Total na loja</th><th></th></tr></thead>
+      <thead><tr><th></th><th>Produto</th><th>Código</th><th class="r">Na loja</th><th class="r">Vendidos</th><th class="r">Valor unit.</th><th class="r">Total na loja</th><th></th></tr></thead>
       <tbody>${lista.map(i => `<tr class="${i.id === editId ? "sel" : ""}">
+        <td class="thumb">${i.foto ? `<button type="button" class="thumbbtn" data-foto="${i.id}" title="Ver foto"><img src="${esc(fotoURL(i.foto))}" alt="" loading="lazy"></button>` : `<span class="nofoto"></span>`}</td>
         <td class="nome">${esc(i.nome)}${+i.qtd === 0 ? `<span class="pill">esgotado</span>` : ""}</td>
         <td class="code" data-l="Código">${esc(i.codigo) || "—"}</td>
         <td class="r${+i.qtd === 0 ? " zero" : ""}" data-l="Na loja">${fmtQ(+i.qtd)}</td>
@@ -219,7 +240,7 @@ function render() {
         <td class="r total" data-l="Total">${brl.format(tot(i))}</td>
         <td class="acts"><button class="link" data-ed="${i.id}" type="button">Editar</button><button class="link red" data-del="${i.id}" type="button">Excluir</button></td>
       </tr>`).join("")}</tbody>
-      <tfoot><tr><td>Total na loja</td><td class="hm"></td><td class="r hm">${fmtQ(r.pecas)}</td><td class="r hm">${fmtQ(r.pecasVend)}</td><td class="hm"></td><td class="r total">${brl.format(r.total)}</td><td class="hm"></td></tr></tfoot>
+      <tfoot><tr><td class="hm"></td><td>Total na loja</td><td class="hm"></td><td class="r hm">${fmtQ(r.pecas)}</td><td class="r hm">${fmtQ(r.pecasVend)}</td><td class="hm"></td><td class="r total">${brl.format(r.total)}</td><td class="hm"></td></tr></tfoot>
     </table></div>` : `<div class="empty"><strong>Nenhum produto nesta loja</strong>Preencha o formulário acima para registrar o primeiro item deixado aqui.</div>`}
 
     <h3 class="sec">Vendas lançadas pela loja <small>${vend.length ? `${fmtQ(r.pecasVend)} peças · ${brl.format(r.vendido)}` : ""}</small></h3>
@@ -242,18 +263,21 @@ function render() {
   $("pdfLoja").onclick = () => gerarPDF([loja]);
   $("renLoja").onclick = async () => { const n = await dialog({ title: "Renomear loja", input: true, label: "Nome da loja", value: loja.nome, ok: "Salvar" }); if (n) comTrava(null, async () => { const { error } = await sb.from("lojas").update({ nome: n }).eq("id", loja.id); if (error) throw error; await carregar(); }); };
   $("delLoja").onclick = async () => { if (await dialog({ title: `Excluir “${loja.nome}”?`, text: `A aba, os ${r.n} produtos e o histórico de vendas dela serão apagados, e o link da loja para de funcionar. Isso não pode ser desfeito.`, ok: "Excluir loja", danger: true })) comTrava(null, async () => { const { error } = await sb.from("lojas").delete().eq("id", loja.id); if (error) throw error; await carregar(); status("Loja excluída.", "ok"); }); };
-  p.querySelectorAll("[data-ed]").forEach(b => b.onclick = () => { editId = b.dataset.ed; render(); $("iNome").focus(); });
+  p.querySelectorAll("[data-ed]").forEach(b => b.onclick = () => { editId = b.dataset.ed; limparFoto(); render(); $("iNome").focus(); });
+  p.querySelectorAll("[data-foto]").forEach(b => b.onclick = () => verFoto(itens.find(i => i.id === b.dataset.foto)));
+  $("iFoto").onchange = e => { const f = e.target.files[0]; if (!f) return; limparFoto(); fotoNova = f; fotoNovaURL = URL.createObjectURL(f); render(); };
+  if ($("semFoto")) $("semFoto").onclick = () => { limparFoto(); fotoRemover = true; render(); };
   p.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
     const it = itens.find(i => i.id === b.dataset.del);
     if (await dialog({ title: "Excluir produto?", text: `${it.nome} (${fmtQ(it.qtd)} un.) sai da lista desta loja. As vendas já lançadas dele continuam no histórico.`, ok: "Excluir", danger: true }))
-      comTrava(null, async () => { const { error } = await sb.from("itens").delete().eq("id", it.id); if (error) throw error; if (editId === it.id) editId = null; await carregar(); });
+      comTrava(null, async () => { const { error } = await sb.from("itens").delete().eq("id", it.id); if (error) throw error; if (it.foto) sb.storage.from("fotos").remove([it.foto]); if (editId === it.id) { editId = null; limparFoto(); } await carregar(); });
   });
   p.querySelectorAll("[data-undo]").forEach(b => b.onclick = async () => {
     const v = vendas.find(x => x.id === b.dataset.undo);
     if (await dialog({ title: "Desfazer esta venda?", text: `${v.nome}: ${fmtQ(v.qtd)} un. voltam para a quantidade na loja e o registro sai do histórico.`, ok: "Desfazer venda", danger: true }))
       comTrava(null, async () => { const { error } = await sb.rpc("admin_desfazer_venda", { p_venda: v.id }); if (error) throw error; await carregar(); status("Venda desfeita.", "ok"); });
   });
-  if ($("cancelEd")) $("cancelEd").onclick = () => { editId = null; render(); };
+  if ($("cancelEd")) $("cancelEd").onclick = () => { editId = null; limparFoto(); render(); };
 
   const prev = () => $("prevTotal").textContent = brl.format(Math.round(parseNum($("iQtd").value)) * parseNum($("iVal").value));
   $("iQtd").oninput = $("iVal").oninput = prev; prev();
@@ -261,11 +285,19 @@ function render() {
     e.preventDefault();
     const nome = $("iNome").value.trim(); if (!nome) return;
     const dados = { loja_id: ativa, nome, codigo: $("iCod").value.trim(), qtd: Math.max(0, Math.round(parseNum($("iQtd").value))), valor: Math.max(0, Math.round(parseNum($("iVal").value) * 100) / 100) };
+    const fotoAntiga = ed?.foto || "";
     const ok = await comTrava($("iBtn"), async () => {
+      if (fotoNova) {
+        const caminho = `${ativa}/${crypto.randomUUID()}.jpg`;
+        const { error: eUp } = await sb.storage.from("fotos").upload(caminho, await reduzirFoto(fotoNova), { contentType: "image/jpeg" });
+        if (eUp) throw eUp;
+        dados.foto = caminho;
+      } else if (fotoRemover) dados.foto = "";
       const { error } = ed ? await sb.from("itens").update(dados).eq("id", ed.id) : await sb.from("itens").insert(dados);
-      if (error) throw error;
+      if (error) { if (dados.foto) sb.storage.from("fotos").remove([dados.foto]); throw error; }
+      if (fotoAntiga && "foto" in dados && dados.foto !== fotoAntiga) sb.storage.from("fotos").remove([fotoAntiga]);
     });
-    if (ok) { editId = null; await carregar(); status(ed ? "Item salvo." : "Item adicionado.", "ok"); $("iNome").focus(); }
+    if (ok) { editId = null; limparFoto(); await carregar(); status(ed ? "Item salvo." : "Item adicionado.", "ok"); $("iNome").focus(); }
   };
 }
 
@@ -307,6 +339,15 @@ async function mostrarLink(loja) {
     if (!(await dialog({ title: "Gerar link novo?", text: `O link atual da ${loja.nome} para de funcionar. Você vai precisar enviar o novo para a loja.`, ok: "Gerar link novo", danger: true }))) return;
     comTrava(null, async () => { const { error } = await sb.from("lojas").update({ token: novoToken() }).eq("id", loja.id); if (error) throw error; await carregar(); mostrarLink(lojas.find(l => l.id === loja.id)); });
   };
+}
+
+function verFoto(item) {
+  const veil = document.createElement("div");
+  veil.className = "veil";
+  veil.innerHTML = `<div class="dialog" role="dialog" aria-modal="true"><h3></h3><img src="${esc(fotoURL(item.foto))}" alt="" style="width:100%;border-radius:8px"><div class="row"><button class="ghost" type="button" data-x>Fechar</button></div></div>`;
+  veil.querySelector("h3").textContent = item.nome;
+  document.body.appendChild(veil);
+  veil.onclick = e => { if (e.target === veil || e.target.hasAttribute("data-x")) veil.remove(); };
 }
 
 /* ---------- QR Code: cartão para imprimir e deixar no balcão da loja ---------- */
