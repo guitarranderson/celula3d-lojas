@@ -42,6 +42,8 @@ const ERROS = {
   produto_nao_encontrado: "Esse produto não está mais na lista. Atualize a página.",
   quantidade_invalida: "Informe uma quantidade de pelo menos 1.",
   sem_permissao: "Sua conta não tem permissão para isso.",
+  mesma_loja: "Escolha uma loja diferente da que já tem o produto.",
+  loja_nao_encontrada: "Essa loja não existe mais. Atualize a página.",
   foto_invalida: "Não consegui abrir essa foto. Tente outra imagem (JPG ou PNG).",
 };
 export function msgErro(e) {

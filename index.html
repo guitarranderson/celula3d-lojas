@@ -36,6 +36,10 @@ header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-be
 
 form.item{display:grid;grid-template-columns:auto 2.2fr 1fr .8fr 1fr auto;gap:10px;align-items:end;background:var(--sunk);padding:14px;border-radius:var(--r)}
 form.item.editing{outline:2px solid var(--money)}
+.stepper{display:grid;grid-template-columns:44px 1fr 44px;gap:8px}
+.stepper input{text-align:center;font-size:1.1rem}
+.stepper .ghost{font-size:1.2rem;font-weight:600;padding:6px}
+.link.env{color:var(--accent);font-weight:600}
 .f-foto{align-items:center}
 .f-foto .flbl{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .fotopick{width:64px;height:64px;border:1px dashed var(--line);border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;color:var(--accent);font-size:.8rem;font-weight:600}
@@ -118,7 +122,8 @@ tfoot td{font-weight:600;border-bottom:none}
         <div><h1>Célula 3D <span class="hl">Lojas</span></h1><p class="sub">Peças prontas deixadas para venda em cada loja parceira</p></div>
       </div>
       <div class="grand">
-        <div><div class="lbl">Nas lojas agora</div><div class="val" id="gEstoque">R$ 0,00</div></div>
+        <div><div class="lbl">Nas lojas agora</div><div class="val" id="gLojas">R$ 0,00</div></div>
+        <div id="gEstoqueBox" hidden><div class="lbl">No estoque</div><div class="val" id="gEstoque">R$ 0,00</div></div>
         <div><div class="lbl">Vendido (total)</div><div class="val sold" id="gVendido">R$ 0,00</div></div>
         <div style="flex-basis:100%"><button class="link" id="pdfTodas" type="button">Imprimir todas as lojas (PDF)</button></div>
       </div>
@@ -132,7 +137,7 @@ tfoot td{font-weight:600;border-bottom:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
-import { sb, configurado, brl, fmtQ, $, esc, parseNum, dataHora, msgErro, dialog, copiar, fotoURL, reduzirFoto } from "./comum.js?v=2";
+import { sb, configurado, brl, fmtQ, $, esc, parseNum, dataHora, msgErro, dialog, copiar, fotoURL, reduzirFoto } from "./comum.js?v=3";
 
 let lojas = [], itens = [], vendas = [], ativa = null, editId = null;
 let fotoNova = null, fotoNovaURL = "", fotoRemover = false; // foto escolhida no formulário, ainda não enviada
@@ -169,6 +174,8 @@ const resumo = id => {
   const l = itensDa(id), v = vendasDa(id);
   return { n: l.length, pecas: l.reduce((s, i) => s + (+i.qtd || 0), 0), total: l.reduce((s, i) => s + tot(i), 0), vendido: v.reduce((s, x) => s + x.qtd * x.valor, 0), pecasVend: v.reduce((s, x) => s + x.qtd, 0) };
 };
+const ehEstoque = loja => loja.nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase().startsWith("estoque");
+const fotoEmUso = (caminho, menosId) => !!caminho && itens.some(i => i.foto === caminho && i.id !== menosId);
 const linkDa = loja => new URL("loja.html?t=" + loja.token, location.href).href;
 const novoToken = () => [...crypto.getRandomValues(new Uint8Array(12))].map(b => b.toString(16).padStart(2, "0")).join("");
 
@@ -176,7 +183,10 @@ const novoToken = () => [...crypto.getRandomValues(new Uint8Array(12))].map(b =>
 function render() {
   if (!lojas.find(l => l.id === ativa)) ativa = lojas[0]?.id ?? null;
   try { if (ativa) localStorage.setItem("c3l-aba", ativa); } catch {}
-  $("gEstoque").textContent = brl.format(itens.reduce((s, i) => s + tot(i), 0));
+  const somaDe = f => itens.filter(i => f(lojas.find(l => l.id === i.loja_id))).reduce((s, i) => s + tot(i), 0);
+  $("gLojas").textContent = brl.format(somaDe(l => l && !ehEstoque(l)));
+  $("gEstoque").textContent = brl.format(somaDe(l => l && ehEstoque(l)));
+  $("gEstoqueBox").hidden = !lojas.some(ehEstoque);
   $("gVendido").textContent = brl.format(vendas.reduce((s, v) => s + v.qtd * v.valor, 0));
   $("pdfTodas").hidden = !lojas.length;
 
@@ -188,18 +198,19 @@ function render() {
   const p = $("panel");
   if (!ativa) { p.innerHTML = `<div class="empty"><strong>Nenhuma loja ainda</strong>Clique em <b>+ Nova loja</b> para criar a aba da primeira loja parceira.</div>`; return; }
   const loja = lojas.find(l => l.id === ativa), r = resumo(ativa), lista = itensDa(ativa), vend = vendasDa(ativa), ed = itens.find(i => i.id === editId);
+  const deposito = ehEstoque(loja), destinos = lojas.filter(l => l.id !== loja.id);
 
   p.innerHTML = `
     <div class="storehead">
       <h2>${esc(loja.nome)}</h2>
       <div class="acts">
-        <button class="ghost" id="linkLoja" type="button">Gerar link novo…</button>
+        ${deposito ? "" : `<button class="ghost" id="linkLoja" type="button">Gerar link novo…</button>`}
         <button class="ghost" id="pdfLoja" type="button">Imprimir (PDF)</button>
         <button class="link" id="renLoja" type="button">Renomear</button>
         <button class="link red" id="delLoja" type="button">Excluir loja</button>
       </div>
     </div>
-    <div class="linkbar">
+    ${deposito ? `<div class="notice">Este é o seu <b>estoque</b>: use <b>Enviar</b> em cada produto para mandar peças para uma loja.</div>` : `<div class="linkbar">
       <span class="lbl">Link da loja</span>
       <a class="url" href="${esc(linkDa(loja))}" target="_blank" rel="noopener">${esc(linkDa(loja))}</a>
       <div class="lbtns">
@@ -207,7 +218,7 @@ function render() {
         <button class="ghost" id="qrLink" type="button">QR Code</button>
         <a class="ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(msgLink(loja))}">WhatsApp</a>
       </div>
-    </div>
+    </div>`}
     <div class="stats">
       <div class="stat"><div class="lbl">Produtos</div><div class="val">${r.n}</div></div>
       <div class="stat"><div class="lbl">Peças na loja</div><div class="val">${fmtQ(r.pecas)}</div></div>
@@ -238,7 +249,7 @@ function render() {
         <td class="r" data-l="Vendidos">${fmtQ(vendidoDe(i.id))}</td>
         <td class="r money" data-l="Unit.">${brl.format(+i.valor)}</td>
         <td class="r total" data-l="Total">${brl.format(tot(i))}</td>
-        <td class="acts"><button class="link" data-ed="${i.id}" type="button">Editar</button><button class="link red" data-del="${i.id}" type="button">Excluir</button></td>
+        <td class="acts">${destinos.length && +i.qtd > 0 ? `<button class="link env" data-env="${i.id}" type="button">Enviar</button>` : ""}<button class="link" data-ed="${i.id}" type="button">Editar</button><button class="link red" data-del="${i.id}" type="button">Excluir</button></td>
       </tr>`).join("")}</tbody>
       <tfoot><tr><td class="hm"></td><td>Total na loja</td><td class="hm"></td><td class="r hm">${fmtQ(r.pecas)}</td><td class="r hm">${fmtQ(r.pecasVend)}</td><td class="hm"></td><td class="r total">${brl.format(r.total)}</td><td class="hm"></td></tr></tfoot>
     </table></div>` : `<div class="empty"><strong>Nenhum produto nesta loja</strong>Preencha o formulário acima para registrar o primeiro item deixado aqui.</div>`}
@@ -257,20 +268,23 @@ function render() {
       : `<div class="empty"><strong>Nenhuma venda lançada ainda</strong>Envie o <b>Link da loja</b> para a loja lançar pelo celular o que vender.</div>`}
   `;
 
+  if (!deposito) {
   $("linkLoja").onclick = () => mostrarLink(loja);
   $("qrLink").onclick = () => mostrarQR(loja);
   $("copiarLink").onclick =async e => { const ok = await copiar(linkDa(loja)); e.target.textContent = ok ? "Copiado ✓" : "Selecione e copie"; setTimeout(() => { e.target.textContent = "Copiar"; }, 2500); };
+  }
   $("pdfLoja").onclick = () => gerarPDF([loja]);
   $("renLoja").onclick = async () => { const n = await dialog({ title: "Renomear loja", input: true, label: "Nome da loja", value: loja.nome, ok: "Salvar" }); if (n) comTrava(null, async () => { const { error } = await sb.from("lojas").update({ nome: n }).eq("id", loja.id); if (error) throw error; await carregar(); }); };
   $("delLoja").onclick = async () => { if (await dialog({ title: `Excluir “${loja.nome}”?`, text: `A aba, os ${r.n} produtos e o histórico de vendas dela serão apagados, e o link da loja para de funcionar. Isso não pode ser desfeito.`, ok: "Excluir loja", danger: true })) comTrava(null, async () => { const { error } = await sb.from("lojas").delete().eq("id", loja.id); if (error) throw error; await carregar(); status("Loja excluída.", "ok"); }); };
   p.querySelectorAll("[data-ed]").forEach(b => b.onclick = () => { editId = b.dataset.ed; limparFoto(); render(); $("iNome").focus(); });
+  p.querySelectorAll("[data-env]").forEach(b => b.onclick = () => enviar(itens.find(i => i.id === b.dataset.env), loja));
   p.querySelectorAll("[data-foto]").forEach(b => b.onclick = () => verFoto(itens.find(i => i.id === b.dataset.foto)));
   $("iFoto").onchange = e => { const f = e.target.files[0]; if (!f) return; limparFoto(); fotoNova = f; fotoNovaURL = URL.createObjectURL(f); render(); };
   if ($("semFoto")) $("semFoto").onclick = () => { limparFoto(); fotoRemover = true; render(); };
   p.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
     const it = itens.find(i => i.id === b.dataset.del);
     if (await dialog({ title: "Excluir produto?", text: `${it.nome} (${fmtQ(it.qtd)} un.) sai da lista desta loja. As vendas já lançadas dele continuam no histórico.`, ok: "Excluir", danger: true }))
-      comTrava(null, async () => { const { error } = await sb.from("itens").delete().eq("id", it.id); if (error) throw error; if (it.foto) sb.storage.from("fotos").remove([it.foto]); if (editId === it.id) { editId = null; limparFoto(); } await carregar(); });
+      comTrava(null, async () => { const { error } = await sb.from("itens").delete().eq("id", it.id); if (error) throw error; if (it.foto && !fotoEmUso(it.foto, it.id)) sb.storage.from("fotos").remove([it.foto]); if (editId === it.id) { editId = null; limparFoto(); } await carregar(); });
   });
   p.querySelectorAll("[data-undo]").forEach(b => b.onclick = async () => {
     const v = vendas.find(x => x.id === b.dataset.undo);
@@ -295,7 +309,7 @@ function render() {
       } else if (fotoRemover) dados.foto = "";
       const { error } = ed ? await sb.from("itens").update(dados).eq("id", ed.id) : await sb.from("itens").insert(dados);
       if (error) { if (dados.foto) sb.storage.from("fotos").remove([dados.foto]); throw error; }
-      if (fotoAntiga && "foto" in dados && dados.foto !== fotoAntiga) sb.storage.from("fotos").remove([fotoAntiga]);
+      if (fotoAntiga && "foto" in dados && dados.foto !== fotoAntiga && !fotoEmUso(fotoAntiga, ed.id)) sb.storage.from("fotos").remove([fotoAntiga]);
     });
     if (ok) { editId = null; limparFoto(); await carregar(); status(ed ? "Item salvo." : "Item adicionado.", "ok"); $("iNome").focus(); }
   };
@@ -338,6 +352,43 @@ async function mostrarLink(loja) {
     fechar();
     if (!(await dialog({ title: "Gerar link novo?", text: `O link atual da ${loja.nome} para de funcionar. Você vai precisar enviar o novo para a loja.`, ok: "Gerar link novo", danger: true }))) return;
     comTrava(null, async () => { const { error } = await sb.from("lojas").update({ token: novoToken() }).eq("id", loja.id); if (error) throw error; await carregar(); mostrarLink(lojas.find(l => l.id === loja.id)); });
+  };
+}
+
+function enviar(item, origem) {
+  const destinos = lojas.filter(l => l.id !== origem.id).sort((a, b) => ehEstoque(a) - ehEstoque(b) || a.nome.localeCompare(b.nome));
+  const veil = document.createElement("div");
+  veil.className = "veil";
+  veil.innerHTML = `<div class="dialog" role="dialog" aria-modal="true">
+    <h3>Enviar peças</h3>
+    <p><b></b><br>${fmtQ(+item.qtd)} em ${esc(origem.nome)} · ${brl.format(+item.valor)} cada</p>
+    <div class="field"><label for="envLoja">Para</label><select id="envLoja">${destinos.map(l => `<option value="${l.id}">${esc(l.nome)}</option>`).join("")}</select></div>
+    <div class="field"><label for="envQtd">Quantidade</label>
+      <div class="stepper"><button type="button" class="ghost" data-m aria-label="Menos">−</button><input id="envQtd" class="num" type="number" inputmode="numeric" min="1" max="${+item.qtd}" value="1"><button type="button" class="ghost" data-p aria-label="Mais">+</button></div></div>
+    <p id="envInfo" style="font-size:.88rem"></p>
+    <div class="row"><button class="ghost" type="button" data-x>Cancelar</button><button class="btn" type="button" data-ok>Enviar</button></div>
+  </div>`;
+  veil.querySelector("b").textContent = item.nome;
+  document.body.appendChild(veil);
+  const inp = veil.querySelector("#envQtd"), sel = veil.querySelector("#envLoja"), okB = veil.querySelector("[data-ok]");
+  const q = () => Math.max(1, Math.min(+item.qtd, Math.round(+inp.value || 1)));
+  const igual = lojaId => itens.find(i => i.loja_id === lojaId && (item.codigo ? i.codigo === item.codigo : !i.codigo && i.nome.trim().toLowerCase() === item.nome.trim().toLowerCase()));
+  const upd = () => {
+    const d = lojas.find(l => l.id === sel.value), j = igual(sel.value);
+    okB.textContent = `Enviar ${q()} para ${d.nome}`;
+    veil.querySelector("#envInfo").textContent = j ? `${d.nome} já tem este produto (${fmtQ(+j.qtd)}). Vai ficar com ${fmtQ(+j.qtd + q())}.` : `${d.nome} ainda não tem este produto: ele será criado lá com o mesmo nome, código, valor e foto.`;
+  };
+  veil.querySelector("[data-m]").onclick = () => { inp.value = Math.max(1, q() - 1); upd(); };
+  veil.querySelector("[data-p]").onclick = () => { inp.value = Math.min(+item.qtd, q() + 1); upd(); };
+  inp.oninput = sel.onchange = upd; upd();
+  veil.querySelector("[data-x]").onclick = () => veil.remove();
+  okB.onclick = async () => {
+    const n = q(), d = lojas.find(l => l.id === sel.value);
+    const ok = await comTrava(okB, async () => {
+      const { error } = await sb.rpc("admin_enviar", { p_item: item.id, p_loja: d.id, p_qtd: n });
+      if (error) throw error;
+    });
+    if (ok) { veil.remove(); await carregar(); status(`Enviado: ${fmtQ(n)}× ${item.nome} para ${d.nome}.`, "ok"); }
   };
 }
 
