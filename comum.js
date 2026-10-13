@@ -50,7 +50,10 @@ const ERROS = {
 export function msgErro(e) {
   const m = String(e?.message || e || "");
   for (const k in ERROS) if (m.includes(k)) return ERROS[k];
-  if (/Failed to fetch|NetworkError|network/i.test(m)) return "Sem conexão com a internet. Tente de novo.";
+  if (/Failed to fetch|NetworkError|network|Load failed/i.test(m))
+    return navigator.onLine === false
+      ? "Este aparelho está sem internet. Confira o Wi-Fi ou os dados móveis e tente de novo."
+      : "O sistema da Célula 3D está fora do ar no momento. Tente de novo mais tarde ou avise a Célula 3D.";
   if (/Invalid login/i.test(m)) return "E-mail ou senha incorretos.";
   return "Não foi possível concluir. Tente de novo em instantes.";
 }
